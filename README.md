@@ -9,5 +9,8 @@ VPN decryption utility designed to parse, decrypt complex VPN and proxy configur
 chmod +x Pantegnos && ./Pantegnos -input configs -output outputs
 ```
 
+#Current Support
+- slipnet-enc:// nm-(anytype eg. vless-dns-ssh)://
+
 If you wanted to reach out or something message me on telegram
 > https://t.me/panirpega
