@@ -1,0 +1,70 @@
+name: Pantegnos Manual Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Build and Create Unified Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+          check-latest: true
+
+      - name: Build Binaries (Linux & Windows)
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o pantegnos-linux .
+          GOOS=windows GOARCH=amd64 go build -o pantegnos-win.exe .
+
+      - name: Compress binaries (UPX)
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          files: |
+            pantegnos-linux
+            pantegnos-win.exe
+          args: --ultra-brute --best -q
+
+      - name: Auto Increment Semver
+        uses: MCKanpolat/auto-semver-action@v1
+        id: versioning
+        with:
+          releaseType: patch
+          incrementPerCommit: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            pantegnos-linux
+            pantegnos-win.exe
+          tag_name: v${{ steps.versioning.outputs.version }}
+          name: Pantegnos Release v${{ steps.versioning.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Pantegnos Decryptor v${{ steps.versioning.outputs.version }} 🛡️
+
+            **System Artifacts:**
+            * Linux (AMD64): `pantegnos-linux`
+            * Windows (AMD64): `pantegnos-win.exe`
+
+            **Release Notes:**
+            Manual release triggered via GitHub Actions.
+
+            ---
+            *Enjoy lol*
