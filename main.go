@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mazznoer/colorgrad"
 	"github.com/muesli/termenv"
@@ -146,4 +147,5 @@ func main() {
 
 	}
 	fmt.Println("All files processed.")
+	time.Sleep(time.Second * 5)
 }

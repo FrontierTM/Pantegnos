@@ -11,7 +11,8 @@ chmod +x Pantegnos && ./Pantegnos -input configs -output outputs
 
 # Current Support
 - slipnet-enc:// nm-(anytype eg. vless-dns-ssh)://
-- Slipnet - Netmod (More soon)
+- happ://(crypt-[1-4])
+- Slipnet - Netmod - Happ (More soon)
 
 If you wanted to reach out or something message me on telegram
 > https://t.me/panirpega
