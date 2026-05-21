@@ -5,6 +5,8 @@ go 1.26.3
 require (
 	github.com/mazznoer/colorgrad v0.11.1
 	github.com/muesli/termenv v0.16.0
+	golang.org/x/crypto v0.51.0
+	golang.org/x/term v0.43.0
 )
 
 require (

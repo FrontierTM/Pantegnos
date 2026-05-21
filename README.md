@@ -10,7 +10,10 @@ chmod +x Pantegnos && ./Pantegnos -input configs -output outputs
 ```
 
 # Current Support
-- slipnet-enc:// nm-(anytype eg. vless-dns-ssh)://
+- slipnet-enc://
+- slipnet://
+- slipnet-bundle-enc:// (Requires Bundle password)
+- nm-(anytype eg. vless-dns-ssh)://
 - happ://(crypt-[1-4])
 - Slipnet - Netmod - Happ (More soon)
 
