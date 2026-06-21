@@ -11,6 +11,7 @@ chmod +x Pantegnos && ./Pantegnos -input configs -output outputs
 
 # Current Support
 - slipnet-enc://
+- hat(.hat files)
 - slipnet://
 - slipnet-bundle-enc:// (Requires Bundle password)
 - nm-(anytype eg. vless-dns-ssh)://

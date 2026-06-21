@@ -2,7 +2,6 @@ package impl
 
 import (
 	"Pantegnos/modules"
-	"crypto/aes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -40,23 +39,6 @@ func init() {
 
 		},
 	})
-}
-
-func decryptAESECB(ciphertext, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	if len(ciphertext)%block.BlockSize() != 0 {
-		return nil, fmt.Errorf("ciphertext length not multiple of block size")
-	}
-
-	plaintext := make([]byte, len(ciphertext))
-	bs := block.BlockSize()
-	for start := 0; start < len(ciphertext); start += bs {
-		block.Decrypt(plaintext[start:start+bs], ciphertext[start:start+bs])
-	}
-	return plaintext, nil
 }
 
 func trimNullBytes(data []byte) []byte {

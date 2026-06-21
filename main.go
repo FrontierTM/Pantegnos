@@ -103,27 +103,41 @@ func main() {
 		}
 
 		content := strings.TrimSpace(string(data))
-		parts := strings.SplitN(content, "://", 2)
 		fileExt := filepath.Ext(file)
 
-		if len(parts) < 2 {
-			fmt.Printf("Invalid format in %s: missing protocol separator '://'\n", file)
-			continue
-		}
-
-		protocol := parts[0]
-		payload := parts[1]
-
-		fmt.Printf("Found Protocol: %s\n", protocol)
+		var protocol, payload string
+		moduleFound := false
 
 		for _, module := range modules.Registry {
-			matchFound := false
-
 			if module.Extension == fileExt {
-				matchFound = true
+				if strings.Contains(content, "://") {
+					parts := strings.SplitN(content, "://", 2)
+					protocol = parts[0]
+					payload = parts[1]
+				} else {
+					protocol = ""
+					payload = content
+				}
+
+				fmt.Printf("[Success] Module '%s' handling file via extension: %s\n", module.Name, file)
+				module.Exec(protocol, payload, fileExt, file, OutputDir)
+				moduleFound = true
+				break
+			}
+		}
+
+		if !moduleFound {
+			if !strings.Contains(content, "://") {
+				fmt.Printf("Invalid format in %s: missing protocol separator '://'\n", file)
+				continue
 			}
 
-			if !matchFound {
+			parts := strings.SplitN(content, "://", 2)
+			protocol = parts[0]
+			payload = parts[1]
+
+			for _, module := range modules.Registry {
+				matchFound := false
 				for _, protoPattern := range module.Proto {
 					if strings.HasSuffix(protoPattern, "*") {
 						prefix := strings.TrimSuffix(protoPattern, "*")
@@ -136,15 +150,19 @@ func main() {
 						break
 					}
 				}
-			}
 
-			if matchFound {
-				fmt.Printf("[Success] Module '%s' handling file: %s\n", module.Name, file)
-				module.Exec(protocol, payload, fileExt, file, OutputDir)
-				break
+				if matchFound {
+					fmt.Printf("[Success] Module '%s' handling file via protocol: %s\n", module.Name, file)
+					module.Exec(protocol, payload, fileExt, file, OutputDir)
+					moduleFound = true
+					break
+				}
 			}
 		}
 
+		if !moduleFound {
+			fmt.Printf("No matching module found for file: %s\n", file)
+		}
 	}
 	fmt.Println("All files processed.")
 	time.Sleep(time.Second * 5)
