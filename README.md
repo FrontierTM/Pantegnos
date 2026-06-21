@@ -12,11 +12,12 @@ chmod +x Pantegnos && ./Pantegnos -input configs -output outputs
 # Current Support
 - slipnet-enc://
 - hat(.hat files)
+- NpvTunnel(.npvt) (AKA Whitebox AES architecture (Karroumi/Chow-style with dual T-box/Y-box split + 4-bit nibble XOR network) xddd)
 - slipnet://
 - slipnet-bundle-enc:// (Requires Bundle password)
 - nm-(anytype eg. vless-dns-ssh)://
 - happ://(crypt-[1-4])
-- Slipnet - Netmod - Happ (More soon)
+- Slipnet - Netmod - Happ - HatTunnel - NpvTunnel(Napsternetv) (More soon)
 
 If you wanted to reach out or something message me on telegram
 > https://t.me/panirpega
