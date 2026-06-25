@@ -68,12 +68,6 @@ Pre-built binaries are available in the [Releases](https://github.com/KernelDotD
 - [golang.org/x/crypto](https://pkg.go.dev/golang.org/x/crypto) — PBKDF2 key derivation
 - [golang.org/x/term](https://pkg.go.dev/golang.org/x/term) — Secure password input (bundle mode)
 
-## Stats
-
-![GitHub Stats](https://github-readme-stats.vercel.app/api?username=KernelDotDLL&repo=Pantegnos&show_icons=true&theme=radical)
-
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=KernelDotDLL&repo=Pantegnos&layout=compact&theme=radical)
-
 ## License
 
 Copyright (c) 2026 FrontierTM. Licensed under the MIT License. See [LICENSE](LICENSE) for details.
