@@ -2,11 +2,11 @@ package impl
 
 import (
 	"Pantegnos/modules"
-	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +31,8 @@ func init() {
 			}
 			var dataList = blobs
 
+			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".npvt")+".txt")
+
 			for _, data := range dataList {
 				if len(data) < 16 {
 					fmt.Println("  too short to contain a 16-byte nonce, skipping")
@@ -41,27 +43,60 @@ func init() {
 					fmt.Println("  decrypt error:", err)
 					continue
 				}
-				var asJSON bytes.Buffer
-				if json.Indent(&asJSON, pt, "  ", "  ") == nil {
-					fmt.Println(asJSON.String())
-					outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".npvt")+".txt")
 
-					f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-					if err != nil {
-						fmt.Printf("Error opening %s: %v\n", outputFile, err)
-						return
-					}
+				uris := processBlob(pt)
+				if len(uris) == 0 {
+					fmt.Println("  no proxy configs found in this blob, skipping")
+					continue
+				}
 
-					if _, err := f.WriteString(asJSON.String()); err != nil {
-						fmt.Printf("Error writing to %s: %v\n", outputFile, err)
-						return
-					}
-					f.Close()
+				for _, uri := range uris {
+					fmt.Println(uri)
+				}
+				if werr := appendLines(outputFile, uris); werr != nil {
+					fmt.Printf("Error writing to %s: %v\n", outputFile, werr)
+					return
 				}
 			}
 
 		},
 	})
+}
+
+type npvtProfile struct {
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	V2rayProfile *struct {
+		Remarks   string `json:"remarks"`
+		V2rayJson string `json:"v2rayJson"`
+	} `json:"v2rayProfile"`
+}
+
+func processBlob(pt []byte) []string {
+	var profiles []npvtProfile
+	if err := json.Unmarshal(pt, &profiles); err == nil && len(profiles) > 0 {
+		var uris []string
+		sawProfile := false
+		for _, p := range profiles {
+			if p.V2rayProfile == nil || strings.TrimSpace(p.V2rayProfile.V2rayJson) == "" {
+				continue
+			}
+			sawProfile = true
+			sub, err := extractURIsFromConfig([]byte(p.V2rayProfile.V2rayJson))
+			if err != nil || len(sub) == 0 {
+				continue
+			}
+			uris = append(uris, sub...)
+		}
+		if sawProfile {
+			return uris
+		}
+	}
+
+	if sub, err := extractURIsFromConfig(pt); err == nil && len(sub) > 0 {
+		return sub
+	}
+	return nil
 }
 
 func loadBlobsFromFile(path string) ([][]byte, error) {
@@ -197,6 +232,408 @@ func decrypt(ciphertextWithNonce []byte) ([]byte, error) {
 	copy(nonce[:], ciphertextWithNonce[:16])
 	ct := ciphertextWithNonce[16:]
 	return ctrCrypt(nonce, ct), nil
+}
+
+func appendLines(path string, lines []string) error {
+	if len(lines) == 0 {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, l := range lines {
+		if _, err := f.WriteString(l + "\n"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type tlsSettingsT struct {
+	ServerName    string   `json:"serverName"`
+	AllowInsecure bool     `json:"allowInsecure"`
+	Alpn          []string `json:"alpn"`
+	Fingerprint   string   `json:"fingerprint"`
+}
+
+type realitySettingsT struct {
+	ServerName  string `json:"serverName"`
+	Fingerprint string `json:"fingerprint"`
+	PublicKey   string `json:"publicKey"`
+	ShortId     string `json:"shortId"`
+	SpiderX     string `json:"spiderX"`
+}
+
+type wsSettingsT struct {
+	Path    string            `json:"path"`
+	Headers map[string]string `json:"headers"`
+}
+
+type grpcSettingsT struct {
+	ServiceName string `json:"serviceName"`
+	MultiMode   bool   `json:"multiMode"`
+}
+
+type kcpSettingsT struct {
+	Header struct {
+		Type string `json:"type"`
+	} `json:"header"`
+	Seed string `json:"seed"`
+}
+
+type quicSettingsT struct {
+	Security string `json:"security"`
+	Key      string `json:"key"`
+	Header   struct {
+		Type string `json:"type"`
+	} `json:"header"`
+}
+
+type httpUpgradeSettingsT struct {
+	Path string `json:"path"`
+	Host string `json:"host"`
+}
+
+type streamSettingsT struct {
+	Network             string                `json:"network"`
+	Security            string                `json:"security"`
+	TLSSettings         *tlsSettingsT         `json:"tlsSettings"`
+	RealitySettings     *realitySettingsT     `json:"realitySettings"`
+	WSSettings          *wsSettingsT          `json:"wsSettings"`
+	GRPCSettings        *grpcSettingsT        `json:"grpcSettings"`
+	KCPSettings         *kcpSettingsT         `json:"kcpSettings"`
+	QUICSettings        *quicSettingsT        `json:"quicSettings"`
+	HTTPUpgradeSettings *httpUpgradeSettingsT `json:"httpupgradeSettings"`
+}
+
+type vnextUserT struct {
+	Id         string `json:"id"`
+	Encryption string `json:"encryption"`
+	Flow       string `json:"flow"`
+	Security   string `json:"security"`
+	AlterId    int    `json:"alterId"`
+}
+
+type vnextEntryT struct {
+	Address string       `json:"address"`
+	Port    int          `json:"port"`
+	Users   []vnextUserT `json:"users"`
+}
+
+type vnextSettingsT struct {
+	Vnext []vnextEntryT `json:"vnext"`
+}
+
+type serverEntryT struct {
+	Address  string `json:"address"`
+	Port     int    `json:"port"`
+	Password string `json:"password"`
+	Method   string `json:"method"`
+	Flow     string `json:"flow"`
+}
+
+type serversSettingsT struct {
+	Servers []serverEntryT `json:"servers"`
+}
+
+func buildStreamQuery(ss *streamSettingsT) url.Values {
+	q := url.Values{}
+	network := ss.Network
+	if network == "" {
+		network = "tcp"
+	}
+	q.Set("type", network)
+
+	security := ss.Security
+	if security == "" {
+		security = "none"
+	}
+	q.Set("security", security)
+
+	switch network {
+	case "ws":
+		if ss.WSSettings != nil {
+			if ss.WSSettings.Path != "" {
+				q.Set("path", ss.WSSettings.Path)
+			}
+			if h, ok := ss.WSSettings.Headers["Host"]; ok && h != "" {
+				q.Set("host", h)
+			} else if h, ok := ss.WSSettings.Headers["host"]; ok && h != "" {
+				q.Set("host", h)
+			}
+		}
+	case "grpc":
+		if ss.GRPCSettings != nil {
+			if ss.GRPCSettings.ServiceName != "" {
+				q.Set("serviceName", ss.GRPCSettings.ServiceName)
+			}
+			if ss.GRPCSettings.MultiMode {
+				q.Set("mode", "multi")
+			} else {
+				q.Set("mode", "gun")
+			}
+		}
+	case "kcp":
+		if ss.KCPSettings != nil {
+			if ss.KCPSettings.Header.Type != "" {
+				q.Set("headerType", ss.KCPSettings.Header.Type)
+			}
+			if ss.KCPSettings.Seed != "" {
+				q.Set("seed", ss.KCPSettings.Seed)
+			}
+		}
+	case "quic":
+		if ss.QUICSettings != nil {
+			if ss.QUICSettings.Security != "" {
+				q.Set("quicSecurity", ss.QUICSettings.Security)
+			}
+			if ss.QUICSettings.Key != "" {
+				q.Set("key", ss.QUICSettings.Key)
+			}
+			if ss.QUICSettings.Header.Type != "" {
+				q.Set("headerType", ss.QUICSettings.Header.Type)
+			}
+		}
+	case "httpupgrade":
+		if ss.HTTPUpgradeSettings != nil {
+			if ss.HTTPUpgradeSettings.Path != "" {
+				q.Set("path", ss.HTTPUpgradeSettings.Path)
+			}
+			if ss.HTTPUpgradeSettings.Host != "" {
+				q.Set("host", ss.HTTPUpgradeSettings.Host)
+			}
+		}
+	}
+
+	switch security {
+	case "tls":
+		if ss.TLSSettings != nil {
+			if ss.TLSSettings.ServerName != "" {
+				q.Set("sni", ss.TLSSettings.ServerName)
+			}
+			if ss.TLSSettings.Fingerprint != "" {
+				q.Set("fp", ss.TLSSettings.Fingerprint)
+			}
+			if len(ss.TLSSettings.Alpn) > 0 {
+				q.Set("alpn", strings.Join(ss.TLSSettings.Alpn, ","))
+			}
+			if ss.TLSSettings.AllowInsecure {
+				q.Set("allowInsecure", "1")
+			}
+		}
+	case "reality":
+		if ss.RealitySettings != nil {
+			if ss.RealitySettings.ServerName != "" {
+				q.Set("sni", ss.RealitySettings.ServerName)
+			}
+			if ss.RealitySettings.Fingerprint != "" {
+				q.Set("fp", ss.RealitySettings.Fingerprint)
+			}
+			if ss.RealitySettings.PublicKey != "" {
+				q.Set("pbk", ss.RealitySettings.PublicKey)
+			}
+			if ss.RealitySettings.ShortId != "" {
+				q.Set("sid", ss.RealitySettings.ShortId)
+			}
+			if ss.RealitySettings.SpiderX != "" {
+				q.Set("spx", ss.RealitySettings.SpiderX)
+			}
+		}
+	}
+	return q
+}
+
+func vlessURI(vs vnextSettingsT, ss *streamSettingsT, remarks string) (string, error) {
+	if len(vs.Vnext) == 0 || len(vs.Vnext[0].Users) == 0 {
+		return "", fmt.Errorf("vless: missing vnext/user")
+	}
+	v := vs.Vnext[0]
+	u := v.Users[0]
+
+	q := buildStreamQuery(ss)
+	enc := u.Encryption
+	if enc == "" {
+		enc = "none"
+	}
+	q.Set("encryption", enc)
+	if u.Flow != "" {
+		q.Set("flow", u.Flow)
+	}
+
+	return fmt.Sprintf("vless://%s@%s:%d?%s#%s",
+		u.Id, v.Address, v.Port, q.Encode(), url.PathEscape(remarks)), nil
+}
+
+func vmessURI(vs vnextSettingsT, ss *streamSettingsT, remarks string) (string, error) {
+	if len(vs.Vnext) == 0 || len(vs.Vnext[0].Users) == 0 {
+		return "", fmt.Errorf("vmess: missing vnext/user")
+	}
+	v := vs.Vnext[0]
+	u := v.Users[0]
+
+	network := ss.Network
+	if network == "" {
+		network = "tcp"
+	}
+
+	tlsFlag := ""
+	if ss.Security == "tls" || ss.Security == "reality" {
+		tlsFlag = "tls"
+	}
+
+	host, path := "", ""
+	switch network {
+	case "ws":
+		if ss.WSSettings != nil {
+			path = ss.WSSettings.Path
+			if h, ok := ss.WSSettings.Headers["Host"]; ok {
+				host = h
+			} else if h, ok := ss.WSSettings.Headers["host"]; ok {
+				host = h
+			}
+		}
+	case "grpc":
+		if ss.GRPCSettings != nil {
+			path = ss.GRPCSettings.ServiceName
+		}
+	case "httpupgrade":
+		if ss.HTTPUpgradeSettings != nil {
+			path = ss.HTTPUpgradeSettings.Path
+			host = ss.HTTPUpgradeSettings.Host
+		}
+	}
+
+	sni, fp, alpn := "", "", ""
+	if ss.TLSSettings != nil {
+		sni = ss.TLSSettings.ServerName
+		fp = ss.TLSSettings.Fingerprint
+		if len(ss.TLSSettings.Alpn) > 0 {
+			alpn = strings.Join(ss.TLSSettings.Alpn, ",")
+		}
+	}
+
+	obj := map[string]string{
+		"v":    "2",
+		"ps":   remarks,
+		"add":  v.Address,
+		"port": fmt.Sprintf("%d", v.Port),
+		"id":   u.Id,
+		"aid":  fmt.Sprintf("%d", u.AlterId),
+		"scy":  u.Security,
+		"net":  network,
+		"type": "none",
+		"host": host,
+		"path": path,
+		"tls":  tlsFlag,
+		"sni":  sni,
+		"fp":   fp,
+		"alpn": alpn,
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	return "vmess://" + base64.StdEncoding.EncodeToString(b), nil
+}
+
+func trojanURI(ts serversSettingsT, ss *streamSettingsT, remarks string) (string, error) {
+	if len(ts.Servers) == 0 {
+		return "", fmt.Errorf("trojan: missing server")
+	}
+	s := ts.Servers[0]
+	q := buildStreamQuery(ss)
+	if s.Flow != "" {
+		q.Set("flow", s.Flow)
+	}
+	return fmt.Sprintf("trojan://%s@%s:%d?%s#%s",
+		url.PathEscape(s.Password), s.Address, s.Port, q.Encode(), url.PathEscape(remarks)), nil
+}
+
+func shadowsocksURI(ts serversSettingsT, remarks string) (string, error) {
+	if len(ts.Servers) == 0 {
+		return "", fmt.Errorf("shadowsocks: missing server")
+	}
+	s := ts.Servers[0]
+	userInfo := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", s.Method, s.Password)))
+	return fmt.Sprintf("ss://%s@%s:%d#%s", userInfo, s.Address, s.Port, url.PathEscape(remarks)), nil
+}
+
+func outboundToURI(protocol string, settingsRaw, streamRaw json.RawMessage, remarks string) (string, error) {
+	var ss streamSettingsT
+	if len(streamRaw) > 0 {
+		if err := json.Unmarshal(streamRaw, &ss); err != nil {
+			return "", err
+		}
+	}
+
+	switch protocol {
+	case "vless":
+		var vs vnextSettingsT
+		if err := json.Unmarshal(settingsRaw, &vs); err != nil {
+			return "", err
+		}
+		return vlessURI(vs, &ss, remarks)
+	case "vmess":
+		var vs vnextSettingsT
+		if err := json.Unmarshal(settingsRaw, &vs); err != nil {
+			return "", err
+		}
+		return vmessURI(vs, &ss, remarks)
+	case "trojan":
+		var ts serversSettingsT
+		if err := json.Unmarshal(settingsRaw, &ts); err != nil {
+			return "", err
+		}
+		return trojanURI(ts, &ss, remarks)
+	case "shadowsocks":
+		var ts serversSettingsT
+		if err := json.Unmarshal(settingsRaw, &ts); err != nil {
+			return "", err
+		}
+		return shadowsocksURI(ts, remarks)
+	default:
+		return "", fmt.Errorf("unsupported protocol: %s", protocol)
+	}
+}
+
+func extractURIsFromConfig(pt []byte) ([]string, error) {
+	var cfg struct {
+		Remarks   string            `json:"remarks"`
+		Outbounds []json.RawMessage `json:"outbounds"`
+	}
+	if err := json.Unmarshal(pt, &cfg); err != nil {
+		return nil, err
+	}
+
+	var uris []string
+	for _, obRaw := range cfg.Outbounds {
+		var hdr struct {
+			Tag            string          `json:"tag"`
+			Protocol       string          `json:"protocol"`
+			Settings       json.RawMessage `json:"settings"`
+			StreamSettings json.RawMessage `json:"streamSettings"`
+		}
+		if err := json.Unmarshal(obRaw, &hdr); err != nil {
+			continue
+		}
+		switch hdr.Protocol {
+		case "freedom", "blackhole", "dns", "":
+			continue
+		}
+
+		remarks := cfg.Remarks
+		if remarks == "" {
+			remarks = hdr.Tag
+		}
+		uri, err := outboundToURI(hdr.Protocol, hdr.Settings, hdr.StreamSettings, remarks)
+		if err != nil {
+			continue
+		}
+		uris = append(uris, uri)
+	}
+	return uris, nil
 }
 
 func decodeOne(text string) ([]byte, error) {
