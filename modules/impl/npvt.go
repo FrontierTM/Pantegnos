@@ -2,6 +2,7 @@ package impl
 
 import (
 	"Pantegnos/modules"
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -46,7 +47,13 @@ func init() {
 
 				uris := processBlob(pt)
 				if len(uris) == 0 {
-					fmt.Println("  no proxy configs found in this blob, skipping")
+					fmt.Println("  no proxy configs found in this blob, serving it raw")
+					var asJSON bytes.Buffer
+					json.Indent(&asJSON, pt, "  ", "  ")
+					if werr := appendLines(outputFile, []string{asJSON.String()}); werr != nil {
+						fmt.Printf("Error writing to %s: %v\n", outputFile, werr)
+						return
+					}
 					continue
 				}
 
@@ -63,40 +70,51 @@ func init() {
 	})
 }
 
-type npvtProfile struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	V2rayProfile *struct {
-		Remarks   string `json:"remarks"`
-		V2rayJson string `json:"v2rayJson"`
-	} `json:"v2rayProfile"`
-}
-
 func processBlob(pt []byte) []string {
-	var profiles []npvtProfile
-	if err := json.Unmarshal(pt, &profiles); err == nil && len(profiles) > 0 {
+	var root any
+	if err := json.Unmarshal(pt, &root); err == nil {
 		var uris []string
-		sawProfile := false
-		for _, p := range profiles {
-			if p.V2rayProfile == nil || strings.TrimSpace(p.V2rayProfile.V2rayJson) == "" {
-				continue
-			}
-			sawProfile = true
-			sub, err := extractURIsFromConfig([]byte(p.V2rayProfile.V2rayJson))
-			if err != nil || len(sub) == 0 {
-				continue
-			}
-			uris = append(uris, sub...)
-		}
-		if sawProfile {
+		walkJSON(root, &uris)
+		if len(uris) > 0 {
 			return uris
 		}
 	}
-
 	if sub, err := extractURIsFromConfig(pt); err == nil && len(sub) > 0 {
 		return sub
 	}
 	return nil
+}
+
+func walkJSON(v any, uris *[]string) {
+	switch x := v.(type) {
+	case map[string]any:
+		if raw, ok := x["v2rayJson"]; ok {
+			switch c := raw.(type) {
+			case string:
+				if u, err := extractURIsFromConfig([]byte(c)); err == nil {
+					*uris = append(*uris, u...)
+				}
+			case map[string]any:
+				b, _ := json.Marshal(c)
+				if u, err := extractURIsFromConfig(b); err == nil {
+					*uris = append(*uris, u...)
+				}
+			}
+		}
+		if _, ok := x["outbounds"]; ok {
+			b, _ := json.Marshal(x)
+			if u, err := extractURIsFromConfig(b); err == nil {
+				*uris = append(*uris, u...)
+			}
+		}
+		for _, v := range x {
+			walkJSON(v, uris)
+		}
+	case []any:
+		for _, v := range x {
+			walkJSON(v, uris)
+		}
+	}
 }
 
 func loadBlobsFromFile(path string) ([][]byte, error) {
