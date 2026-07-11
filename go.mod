@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	github.com/mazznoer/colorgrad v0.11.1
 	github.com/muesli/termenv v0.16.0
+	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/crypto v0.51.0
 	golang.org/x/term v0.43.0
 )
@@ -15,5 +16,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mazznoer/csscolorparser v0.1.8 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 )

@@ -51,22 +51,7 @@ func init() {
 		Proto:     []string{""},
 		Extension: ".ehi",
 		Exec: func(proto, payload, extension, file, outputDir string) {
-			var fileBytes []byte
-			var err error
-
-			if file != "" {
-				fileBytes, err = os.ReadFile(file)
-			}
-			if err != nil || len(fileBytes) == 0 {
-				fileBytes = []byte(payload)
-			}
-
-			if len(fileBytes) == 0 {
-				fmt.Printf("[!] Empty file content payload for: %s\n", file)
-				return
-			}
-
-			decryptedString, err := DecryptEHI(fileBytes)
+			decryptedString, err := DecryptEHI([]byte(payload))
 			if err != nil {
 				fmt.Printf("[!] Decryption error for %s: %v\n", file, err)
 				return
