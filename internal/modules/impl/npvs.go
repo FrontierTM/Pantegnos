@@ -188,11 +188,16 @@ func unwrapAppKey(a *npvsAppKeyWrap) ([]byte, error) {
 		return nil, fmt.Errorf("wrap must be %d bytes", npvsWrapSize)
 	}
 
-	kdk := custodianKDK(salt)
-	if kdk == nil {
+	kdks := custodianKDKAll(salt)
+	if len(kdks) == 0 {
 		return nil, fmt.Errorf("whitebox KDK derivation failed")
 	}
-	return chachaOpen(kdk, wrap[:12], wrap[12:], salt)
+	for _, kdk := range kdks {
+		if dek, err := chachaOpen(kdk, wrap[:12], wrap[12:], salt); err == nil {
+			return dek, nil
+		}
+	}
+	return nil, fmt.Errorf("no custodian key matched (tried %d)", len(kdks))
 }
 
 func unwrapPassphrase(p *npvsPassphraseWrap, password string) ([]byte, error) {

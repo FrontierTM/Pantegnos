@@ -28,14 +28,18 @@ var npvsMblBin []byte
 //go:embed assets/npvs/xor.bin
 var npvsXorBin []byte
 
+//go:embed assets/npvs/tboxes_last_v2.bin
+var npvsTlastBinV2 []byte
+
 var wbShiftRows = [16]int{0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11}
 
 var wbKdfPrefix = []byte("npvtunnel/appkey/v1 ")
 
 var (
-	wbTy    [16][256]uint32
-	wbMbl   [16][256]uint32
-	wbTlast [16][256]byte
+	wbTy      [16][256]uint32
+	wbMbl     [16][256]uint32
+	wbTlast   [16][256]byte
+	wbTlastV2 [16][256]byte
 
 	wbOnce sync.Once
 	wbErr  error
@@ -43,13 +47,14 @@ var (
 
 func loadWB() error {
 	wbOnce.Do(func() {
-		if len(npvsTlastBin) != 4096 || len(npvsTyBin) != 16384 ||
+		if len(npvsTlastBin) != 4096 || len(npvsTlastBinV2) != 4096 || len(npvsTyBin) != 16384 ||
 			len(npvsMblBin) != 16384 || len(npvsXorBin) != 24576 {
 			wbErr = errors.New("npvs: embedded whitebox blob has wrong size")
 			return
 		}
 		for i := 0; i < 16; i++ {
 			copy(wbTlast[i][:], npvsTlastBin[i*256:(i+1)*256])
+			copy(wbTlastV2[i][:], npvsTlastBinV2[i*256:(i+1)*256])
 			for j := 0; j < 256; j++ {
 				wbTy[i][j] = binary.BigEndian.Uint32(npvsTyBin[(i*256+j)*4:])
 				wbMbl[i][j] = binary.BigEndian.Uint32(npvsMblBin[(i*256+j)*4:])
@@ -72,6 +77,14 @@ func wbXor(t, a, b int) byte {
 }
 
 func wbBlock(in *[16]byte) (out [16]byte) {
+	return wbBlockT(in, &wbTlast)
+}
+
+func wbBlockV2(in *[16]byte) (out [16]byte) {
+	return wbBlockT(in, &wbTlastV2)
+}
+
+func wbBlockT(in *[16]byte, tlast *[16][256]byte) (out [16]byte) {
 	s := *in
 
 	wbShift(&s)
@@ -121,18 +134,22 @@ func wbBlock(in *[16]byte) (out [16]byte) {
 	wbShift(&s)
 
 	for i := 0; i < 16; i++ {
-		out[i] = wbTlast[i][s[i]]
+		out[i] = tlast[i][s[i]]
 	}
 	return out
 }
 
 func wbCTR(nonce, ct []byte) []byte {
+	return wbCRTT(nonce, ct, &wbTlast)
+}
+
+func wbCRTT(nonce, ct []byte, tlast *[16][256]byte) []byte {
 	var counter [16]byte
 	copy(counter[:], nonce[:16])
 
 	out := make([]byte, len(ct))
 	for i := 0; i < len(ct); i += 16 {
-		ks := wbBlock(&counter)
+		ks := wbBlockT(&counter, tlast)
 
 		n := len(ct) - i
 		if n > 16 {
@@ -161,6 +178,20 @@ func custodianKDK(salt []byte) []byte {
 	stream := wbCTR(material[:16], material[16:])
 	sum := sha256.Sum256(append(append([]byte{}, wbKdfPrefix...), stream...))
 	return sum[:]
+}
+
+func custodianKDKAll(salt []byte) (kdks [][]byte) {
+	if loadWB() != nil {
+		return nil
+	}
+	material := make([]byte, 32)
+	copy(material, salt[:16])
+	for _, tlast := range []*[16][256]byte{&wbTlast, &wbTlastV2} {
+		stream := wbCRTT(material[:16], material[16:], tlast)
+		sum := sha256.Sum256(append(append([]byte{}, wbKdfPrefix...), stream...))
+		kdks = append(kdks, sum[:])
+	}
+	return kdks
 }
 
 func chachaOpen(key, nonce, ctTag, aad []byte) ([]byte, error) {
