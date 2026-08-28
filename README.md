@@ -10,19 +10,19 @@ A command-line decryptor for VPN and proxy configuration files used by various A
 
 ## Supported Formats
 
-| Format                                             | Extension | Protocol                | Module                                                            |
-|----------------------------------------------------|-----------|-------------------------|-------------------------------------------------------------------|
-| SlipNet (Encrypted)                                | `.slip`   | `slipnet-enc://`        | AES-256-GCM with hardcoded key                                    |
-| SlipNet (Plaintext)                                | `.slip`   | `slipnet://`            | Base64 decode + profile parse                                     |
-| HTTP Injector (SSH/V2ray) - Native                 | `.ehi`    | *(extension-based)*     | Argon2id-KDF + XChaCha20-Poly1305 (custom-obfuscated envelope)    |
-| DarkTunnel - SSH DNSTT V2Ray                       | `.dark`   | `darktunnel://`         | AES‑CFB‑256 -> MessagePack + AES‑CFB‑192                            |
-| SlipNet Bundle (Password)                          | `.slip`   | `slipnet-bundle-enc://` | PBKDF2 (600k iter) + AES-GCM                                      |
-| HA Tunnel Plus                                     | `.hat`    | *(extension-based)*     | AES-ECB (SHA1-derived key)                                        |
-| NpvTunnel (NapsternetV) (NPVT)                     | `.npvt`   | `NPVT1`                 | Custom whitebox AES CTR                                           |
-| NpvTunnel (NapsternetV) (NPVS) (PASSKEY PROTECTED) | `.npvs`   | `NPVS`                  | Custom PBKDF2-HMAC-SHA256 + ChaCha20-Poly1305                     |
+| Format                                             | Extension | Protocol                | Module                                                                           |
+|----------------------------------------------------|-----------|-------------------------|----------------------------------------------------------------------------------|
+| SlipNet (Encrypted)                                | `.slip`   | `slipnet-enc://`        | AES-256-GCM with hardcoded key                                                   |
+| SlipNet (Plaintext)                                | `.slip`   | `slipnet://`            | Base64 decode + profile parse                                                    |
+| HTTP Injector (SSH/V2ray) - Native                 | `.ehi`    | *(extension-based)*     | Argon2id-KDF + XChaCha20-Poly1305 (custom-obfuscated envelope)                   |
+| DarkTunnel - SSH DNSTT V2Ray                       | `.dark`   | `darktunnel://`         | AES‑CFB‑256 -> MessagePack + AES‑CFB‑192                                         |
+| SlipNet Bundle (Password)                          | `.slip`   | `slipnet-bundle-enc://` | PBKDF2 (600k iter) + AES-GCM                                                     |
+| HA Tunnel Plus                                     | `.hat`    | *(extension-based)*     | AES-ECB (SHA1-derived key)                                                       |
+| NpvTunnel (NapsternetV) (NPVT)                     | `.npvt`   | `NPVT1`                 | Custom whitebox AES CTR                                                          |
+| NpvTunnel (NapsternetV) (NPVS) (PASSKEY PROTECTED) | `.npvs`   | `NPVS`                  | Custom PBKDF2-HMAC-SHA256 + ChaCha20-Poly1305                                    |
 | NpvTunnel (NapsternetV) (NPVS, AppKey embedded)    | `.npvs`   | `NPVS`                  | Custodian whitebox AES-CTR-SHA256 KDF + ChaCha20-Poly1305 (offline, no password) |
-| NetMod (Outdated - Fix soon)                       | `.nm`     | `nm-*://`               | AES-ECB (fixed key)                                               |
-| Happ Proxy                                         | `.happ`   | `happ://crypt[1-4]/`    | RSA-1024/4096 private key                                         |
+| NetMod (Outdated - Fix soon)                       | `.nm`     | `nm-*://`               | AES-ECB (fixed key)                                                              |
+| Happ Proxy                                         | `.happ`   | `happ://crypt[1-4]/`    | RSA-1024/4096 private key                                                        |
 
 SlipNet profiles support schema versions 1 through 28, covering fields like VLESS, SSH tunneling, SOCKS5, DoH, SNI fragmentation, and more.
 
@@ -64,10 +64,10 @@ chmod +x Pantegnos
 
 ### CLI Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-input` | `configs` | Directory containing encrypted config files |
-| `-output` | `output` | Directory where decrypted files are saved |
+| Flag      | Default   | Description                                 |
+|-----------|-----------|---------------------------------------------|
+| `-input`  | `configs` | Directory containing encrypted config files |
+| `-output` | `output`  | Directory where decrypted files are saved   |
 
 ## Building
 
