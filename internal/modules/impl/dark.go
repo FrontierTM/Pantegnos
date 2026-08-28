@@ -1,15 +1,13 @@
 package impl
 
 import (
-	"Pantegnos/modules"
+	"Pantegnos/internal/modules"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -32,21 +30,15 @@ func init() {
 		ApkAuthor: "https://play.google.com/store/apps/details?id=net.darktunnel.app",
 		Proto:     []string{"darktunnel"},
 		Extension: ".dark",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-
-			decryptedDump, err := DecryptDark(payload)
+		Decrypt: func(req modules.Request) (modules.Result, error) {
+			text, err := DecryptDark(req.Payload)
 			if err != nil {
-				fmt.Printf("[!] Decryption failed for %s: %v\n", file, err)
-				return
+				return modules.Result{}, err
 			}
-
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".dark")+".txt")
-			if err := os.WriteFile(outputFile, []byte(decryptedDump), 0644); err != nil {
-				fmt.Printf("[!] Error writing final dump to %s: %v\n", outputFile, err)
-				return
-			}
-
-			fmt.Printf("[+] Successfully decrypted and saved to: %s\n", outputFile)
+			return modules.Result{
+				Text:     text,
+				FileName: modules.OutputName(req.FileName, ".dark"),
+			}, nil
 		},
 	})
 }

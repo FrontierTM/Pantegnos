@@ -1,19 +1,14 @@
 package impl
 
 import (
-	"Pantegnos/modules"
+	"Pantegnos/internal/modules"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"syscall"
-
-	"golang.org/x/term"
 )
 
 const (
@@ -105,41 +100,35 @@ func init() {
 		ApkAuthor: "com.vonmatrix.npvtunnel",
 		Proto:     []string{"NPVS"},
 		Extension: ".npvs",
-		Exec:      runNPVS,
+		NeedsPassword: func(_, payload string) bool {
+			env, err := parseNpvVEnvelope([]byte(payload))
+			return err == nil && env.hdr.Passphrase != nil
+		},
+		Decrypt: decryptNPVS,
 	})
 }
 
-func runNPVS(proto, payload, extension, file, outputDir string) {
-	raw, err := os.ReadFile(file)
+func decryptNPVS(req modules.Request) (modules.Result, error) {
+	pt, keys, err := decryptNPVSFull(req.Data, req.Password)
 	if err != nil {
-		fmt.Println("error loading file:", err)
-		return
+		return modules.Result{}, err
 	}
-
-	pt, keys, err := decryptNPVSFull(raw)
-	if err != nil {
-		fmt.Println("  decrypt error:", err)
-		return
-	}
-
-	outText := decodeNpvSentinels(string(pt))
 
 	var sb strings.Builder
-	sb.WriteString(outText)
+	sb.WriteString(decodeNpvSentinels(string(pt)))
 	sb.WriteString("\n\n// ---- recovered key material ----\n")
 	for _, kv := range keys {
 		fmt.Fprintf(&sb, "// %s: %s\n", kv[0], kv[1])
 	}
 
-	outFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".npvs")+".txt")
-	if err := os.WriteFile(outFile, []byte(sb.String()), 0644); err != nil {
-		fmt.Printf("error writing %s: %v\n", outFile, err)
-	}
-
-	fmt.Println(outText)
+	return modules.Result{
+		Text:     sb.String(),
+		FileName: modules.OutputName(req.FileName, ".npvs"),
+		Echo:     true,
+	}, nil
 }
 
-func decryptNPVSFull(raw []byte) (pt []byte, keys [][2]string, err error) {
+func decryptNPVSFull(raw []byte, password string) (pt []byte, keys [][2]string, err error) {
 	env, err := parseNpvVEnvelope(raw)
 	if err != nil {
 		return nil, nil, err
@@ -156,7 +145,7 @@ func decryptNPVSFull(raw []byte) (pt []byte, keys [][2]string, err error) {
 	case env.hdr.AppKey != nil:
 		dek, err = unwrapAppKey(env.hdr.AppKey)
 	case env.hdr.Passphrase != nil:
-		dek, err = unwrapPassphrase(env.hdr.Passphrase)
+		dek, err = unwrapPassphrase(env.hdr.Passphrase, password)
 	case len(env.hdr.Recipients) > 0:
 		err = fmt.Errorf("envelope uses recipient ECDH wraps; recipient private key required")
 	default:
@@ -206,12 +195,15 @@ func unwrapAppKey(a *npvsAppKeyWrap) ([]byte, error) {
 	return chachaOpen(kdk, wrap[:12], wrap[12:], salt)
 }
 
-func unwrapPassphrase(p *npvsPassphraseWrap) ([]byte, error) {
+func unwrapPassphrase(p *npvsPassphraseWrap, password string) ([]byte, error) {
 	if p.Kdf != npvsKdfPass {
 		return nil, fmt.Errorf("unsupported passphrase kdf %q", p.Kdf)
 	}
 	if p.Iters < npvsMinIters || p.Iters > npvsMaxIters {
 		return nil, fmt.Errorf("bad iteration count %d", p.Iters)
+	}
+	if password == "" {
+		return nil, fmt.Errorf("password cannot be empty")
 	}
 
 	salt, err := b64UrlNoPad(p.Salt)
@@ -227,33 +219,8 @@ func unwrapPassphrase(p *npvsPassphraseWrap) ([]byte, error) {
 		return nil, fmt.Errorf("wrap must be %d bytes", npvsWrapSize)
 	}
 
-	pw, err := promptForPassword()
-	if err != nil {
-		return nil, err
-	}
-
-	derived := customPBKDF2HmacSha256(pw, salt, p.Iters, 32)
+	derived := customPBKDF2HmacSha256([]byte(password), salt, p.Iters, 32)
 	return chachaOpen(derived, wrap[:12], wrap[12:], salt)
-}
-
-func promptForPassword() ([]byte, error) {
-	if term.IsTerminal(int(syscall.Stdin)) {
-		fmt.Print("Enter .npvs password: ")
-		if pw, err := term.ReadPassword(int(syscall.Stdin)); err == nil {
-			fmt.Println()
-			if password := strings.TrimSpace(string(pw)); password != "" {
-				return []byte(password), nil
-			}
-		}
-	}
-
-	fmt.Print("Enter .npvs password (visible): ")
-	var input string
-	_, _ = fmt.Scanln(&input)
-	if password := strings.TrimSpace(input); password != "" {
-		return []byte(password), nil
-	}
-	return nil, fmt.Errorf("password cannot be empty")
 }
 
 func customPBKDF2HmacSha256(passphraseBytes, salt []byte, iterations, dkLen int) []byte {

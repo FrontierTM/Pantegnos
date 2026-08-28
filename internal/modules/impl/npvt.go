@@ -1,15 +1,13 @@
 package impl
 
 import (
-	"Pantegnos/modules"
+	"Pantegnos/internal/modules"
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -23,51 +21,42 @@ func init() {
 		ApkAuthor: "https://play.google.com/store/apps/details?id=com.napsternetlabs.napsternetv",
 		Proto:     []string{"NPVT1"},
 		Extension: ".npvt",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-
-			blobs, err := loadBlobsFromFile(file)
-			if err != nil {
-				fmt.Println("error loading file:", err)
-				os.Exit(1)
-			}
-			var dataList = blobs
-
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".npvt")+".txt")
-
-			for _, data := range dataList {
-				if len(data) < 16 {
-					fmt.Println("  too short to contain a 16-byte nonce, skipping")
-					continue
-				}
-				pt, err := decrypt(data)
-				if err != nil {
-					fmt.Println("  decrypt error:", err)
-					continue
-				}
-
-				uris := processBlob(pt)
-				if len(uris) == 0 {
-					fmt.Println("  no proxy configs found in this blob, serving it raw")
-					var asJSON bytes.Buffer
-					json.Indent(&asJSON, pt, "  ", "  ")
-					if werr := appendLines(outputFile, []string{asJSON.String()}); werr != nil {
-						fmt.Printf("Error writing to %s: %v\n", outputFile, werr)
-						return
-					}
-					continue
-				}
-
-				for _, uri := range uris {
-					fmt.Println(uri)
-				}
-				if werr := appendLines(outputFile, uris); werr != nil {
-					fmt.Printf("Error writing to %s: %v\n", outputFile, werr)
-					return
-				}
-			}
-
-		},
+		Decrypt:   decryptNPVT,
 	})
+}
+
+func decryptNPVT(req modules.Request) (modules.Result, error) {
+	blobs, err := loadBlobs(req.Data)
+	if err != nil {
+		return modules.Result{}, err
+	}
+
+	var lines []string
+	for _, data := range blobs {
+		if len(data) < 16 {
+			continue
+		}
+
+		pt, err := decrypt(data)
+		if err != nil {
+			continue
+		}
+
+		uris := processBlob(pt)
+		if len(uris) == 0 {
+			var asJSON bytes.Buffer
+			json.Indent(&asJSON, pt, "", "  ")
+			lines = append(lines, strings.TrimSpace(asJSON.String()))
+			continue
+		}
+		lines = append(lines, uris...)
+	}
+
+	return modules.Result{
+		Text:     strings.Join(lines, "\n"),
+		FileName: modules.OutputName(req.FileName, ".npvt"),
+		Echo:     true,
+	}, nil
 }
 
 func processBlob(pt []byte) []string {
@@ -117,11 +106,7 @@ func walkJSON(v any, uris *[]string) {
 	}
 }
 
-func loadBlobsFromFile(path string) ([][]byte, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+func loadBlobs(raw []byte) ([][]byte, error) {
 	text := strings.TrimSpace(string(raw))
 	tokens := strings.Split(text, ",")
 
@@ -250,23 +235,6 @@ func decrypt(ciphertextWithNonce []byte) ([]byte, error) {
 	copy(nonce[:], ciphertextWithNonce[:16])
 	ct := ciphertextWithNonce[16:]
 	return ctrCrypt(nonce, ct), nil
-}
-
-func appendLines(path string, lines []string) error {
-	if len(lines) == 0 {
-		return nil
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	for _, l := range lines {
-		if _, err := f.WriteString(l + "\n"); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type tlsSettingsT struct {

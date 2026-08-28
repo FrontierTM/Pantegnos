@@ -1,7 +1,7 @@
 package impl
 
 import (
-	"Pantegnos/modules"
+	"Pantegnos/internal/modules"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
@@ -13,8 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"unicode/utf16"
 
@@ -50,19 +48,15 @@ func init() {
 		ApkAuthor: "https://play.google.com/store/apps/details?id=com.evozi.injector",
 		Proto:     []string{""},
 		Extension: ".ehi",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-			decryptedString, err := DecryptEHI([]byte(payload))
+		Decrypt: func(req modules.Request) (modules.Result, error) {
+			text, err := DecryptEHI(req.Data)
 			if err != nil {
-				fmt.Printf("[!] Decryption error for %s: %v\n", file, err)
-				return
+				return modules.Result{}, err
 			}
-
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".ehi")+".txt")
-
-			if err := os.WriteFile(outputFile, []byte(decryptedString), 0644); err != nil {
-				fmt.Printf("[!] Error writing final dump to %s: %v\n", outputFile, err)
-				return
-			}
+			return modules.Result{
+				Text:     text,
+				FileName: modules.OutputName(req.FileName, ".ehi"),
+			}, nil
 		},
 	})
 }

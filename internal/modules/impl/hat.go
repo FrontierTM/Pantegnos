@@ -7,11 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
-	"Pantegnos/modules"
+	"Pantegnos/internal/modules"
 )
 
 const HatImportKey = "8515D40BD04D8C97"
@@ -22,11 +19,10 @@ func init() {
 		ApkAuthor: "https://play.google.com/store/apps/details?id=com.hatunnel.plusl",
 		Proto:     []string{""},
 		Extension: ".hat",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-			ciphertext, err := base64.StdEncoding.DecodeString(payload)
+		Decrypt: func(req modules.Request) (modules.Result, error) {
+			ciphertext, err := base64.StdEncoding.DecodeString(req.Payload)
 			if err != nil {
-				fmt.Printf("Base64 decode error for %s: %v\n", file, err)
-				return
+				return modules.Result{}, fmt.Errorf("base64 decode: %v", err)
 			}
 
 			hasher := sha1.New()
@@ -35,14 +31,12 @@ func init() {
 
 			plaintext, err := decryptAESECB(ciphertext, derivedKey)
 			if err != nil {
-				fmt.Printf("Decrypt error for %s: %v\n", file, err)
-				return
+				return modules.Result{}, err
 			}
 
 			unpaddedPlaintext, err := pkcs7Unpad(plaintext, aes.BlockSize)
 			if err != nil {
-				fmt.Printf("Unpadding error for %s: %v\n", file, err)
-				return
+				return modules.Result{}, err
 			}
 
 			var prettyJSON bytes.Buffer
@@ -50,12 +44,10 @@ func init() {
 				unpaddedPlaintext = prettyJSON.Bytes()
 			}
 
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".hat")+".txt")
-			if err := os.WriteFile(outputFile, unpaddedPlaintext, 0644); err != nil {
-				fmt.Printf("Error writing %s: %v\n", outputFile, err)
-				return
-			}
-			fmt.Printf("Successfully decrypted: %s\n", outputFile)
+			return modules.Result{
+				Text:     string(unpaddedPlaintext),
+				FileName: modules.OutputName(req.FileName, ".hat"),
+			}, nil
 		},
 	})
 }

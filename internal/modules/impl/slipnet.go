@@ -1,22 +1,16 @@
 package impl
 
 import (
-	"Pantegnos/modules"
-	"Pantegnos/utils"
+	"Pantegnos/internal/modules"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/mazznoer/colorgrad"
 	"golang.org/x/crypto/pbkdf2"
-	"golang.org/x/term"
 )
 
 const (
@@ -67,67 +61,42 @@ func init() {
 		ApkAuthor: "https://github.com/anonvector/SlipNet/releases/",
 		Proto:     []string{"slipnet-enc", "slipnet", "slipnet-bundle-enc"},
 		Extension: ".slip",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-
-			if proto == "slipnet-bundle-enc" {
-				fmt.Printf("[*] Processing SlipNet Password Bundle configuration: %s\n", file)
-
-				//Take a look at this gay ahh setup lol xd
-				fmt.Print(utils.ColorizeGradientText("Enter bundle password: ", colorgrad.Rainbow()))
-				passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
-				if err != nil {
-					fmt.Printf("[!] Failed to read password: %v\n", err)
-					return
-				}
-				password := strings.TrimSpace(string(passwordBytes))
-
-				if password == "" {
-					fmt.Println("[!] Password cannot be empty")
-					return
-				}
-
-				decrypted, err := decryptBundleBlob(payload, password)
-				if err != nil {
-					fmt.Printf("[!] Failed to decrypt bundle %s: %v\n", file, err)
-					return
-				}
-
-				outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".slip")+"_bundle.txt")
-				if err := os.WriteFile(outputFile, []byte(decrypted), 0644); err != nil {
-					fmt.Printf("Error writing %s: %v\n", outputFile, err)
-					return
-				}
-				fmt.Printf("[+] Successfully decrypted bundle and saved to: %s\n", outputFile)
-				return
-			}
-
-			if proto == "slipnet" {
-				data, err := base64.StdEncoding.DecodeString(payload)
-				if err != nil {
-					log.Println("Error decoding base64 payload:", err)
-				}
-				formattedProfile := parseProfile(string(data))
-				fmt.Println(formattedProfile)
-				return
-			}
-
-			fmt.Printf("[*] Processing SlipNet configuration: %s\n", file)
-			decrypted, err := decryptBlob(KEY_HEX, payload)
-			if err != nil {
-				fmt.Printf("[!] Failed to decrypt %s: %v\n", file, err)
-				return
-			}
-
-			formattedProfile := parseProfile(decrypted)
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".slip")+".txt")
-			if err := os.WriteFile(outputFile, []byte(formattedProfile), 0644); err != nil {
-				fmt.Printf("Error writing %s: %v\n", outputFile, err)
-				return
-			}
-			fmt.Printf("[+] Successfully decrypted and saved to: %s\n", outputFile)
+		NeedsPassword: func(proto, _ string) bool {
+			return proto == "slipnet-bundle-enc"
 		},
+		Decrypt: decryptSlipNet,
 	})
+}
+
+func decryptSlipNet(req modules.Request) (modules.Result, error) {
+	switch req.Proto {
+	case "slipnet-bundle-enc":
+		decrypted, err := decryptBundleBlob(req.Payload, req.Password)
+		if err != nil {
+			return modules.Result{}, err
+		}
+		return modules.Result{
+			Text:     decrypted,
+			FileName: modules.Stem(req.FileName, ".slip") + "_bundle.txt",
+		}, nil
+
+	case "slipnet":
+		data, err := base64.StdEncoding.DecodeString(req.Payload)
+		if err != nil {
+			return modules.Result{}, fmt.Errorf("base64 decode: %v", err)
+		}
+		return modules.Result{Text: parseProfile(string(data)), Echo: true}, nil
+
+	default:
+		decrypted, err := decryptBlob(KEY_HEX, req.Payload)
+		if err != nil {
+			return modules.Result{}, err
+		}
+		return modules.Result{
+			Text:     parseProfile(decrypted),
+			FileName: modules.OutputName(req.FileName, ".slip"),
+		}, nil
+	}
 }
 
 func parseProfile(decryptedText string) string {

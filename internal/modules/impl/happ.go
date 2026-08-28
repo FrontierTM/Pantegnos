@@ -1,14 +1,12 @@
 package impl
 
 import (
-	"Pantegnos/modules"
+	"Pantegnos/internal/modules"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -59,28 +57,21 @@ func init() {
 		ApkAuthor: "https://play.google.com/store/apps/details?id=com.happproxy",
 		Proto:     []string{"happ"},
 		Extension: ".happ",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-
-			fmt.Printf("[*] Processing Happ configuration: %s\n", file)
+		Decrypt: func(req modules.Request) (modules.Result, error) {
 			engine, err := New()
 			if err != nil {
-				fmt.Printf("[-] CRITICAL: Failed to initialize Happ cryptographic engine: %v\n", err)
-				return
+				return modules.Result{}, fmt.Errorf("failed to initialize Happ cryptographic engine: %w", err)
 			}
 
-			result, err := engine.Decrypt(payload)
+			result, err := engine.Decrypt(req.Payload)
 			if err != nil {
-				fmt.Printf("[-] Error decrypting payload for %s: %v\n", file, err)
-				return
+				return modules.Result{}, err
 			}
 
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".happ")+".txt")
-
-			if err := os.WriteFile(outputFile, []byte(result.DecryptedData), 0644); err != nil {
-				fmt.Printf("[-] Error writing %s: %v\n", outputFile, err)
-				return
-			}
-
+			return modules.Result{
+				Text:     result.DecryptedData,
+				FileName: modules.OutputName(req.FileName, ".happ"),
+			}, nil
 		},
 	})
 }
