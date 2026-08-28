@@ -10,3 +10,4 @@
 # IDE
 .idea/
 *.exe
+workspace/
