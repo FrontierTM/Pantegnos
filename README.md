@@ -4,6 +4,7 @@
 [![Forks](https://img.shields.io/github/forks/FrontierTM/Pantegnos?style=flat-square)](https://github.com/FrontierTM/Pantegnos/network/members)
 [![Issues](https://img.shields.io/github/issues/FrontierTM/Pantegnos?style=flat-square)](https://github.com/FrontierTM/Pantegnos/issues)
 [![Go](https://img.shields.io/badge/Go-1.26.3+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Site](https://img.shields.io/badge/Web%20Decryptor-frontiertm.github.io%2FPantegnos-ff9e3d?style=flat-square)](https://frontiertm.github.io/Pantegnos/)
 
 A command-line decryptor for VPN and proxy configuration files used by various Android and desktop clients. Pantegnos extracts readable server metadata from encrypted proprietary formats, making it useful for security researchers analyzing these tools.
 
