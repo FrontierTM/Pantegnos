@@ -33,7 +33,7 @@ func TestCustomPBKDF2MatchesStdlib(t *testing.T) {
 
 func TestCustodianKDKBothGenerations(t *testing.T) {
 	salt := []byte{0x84, 0x3c, 0xc2, 0xc9, 0x01, 0xce, 0x91, 0x51, 0x6c, 0x38, 0xcc, 0x66, 0x05, 0xb9, 0x2e, 0x47}
-	kdks := custodianKDKAll(salt)
+	kdks := custodianKDKs(salt)
 	if len(kdks) != 2 {
 		t.Fatalf("expected 2 candidate KDKs, got %d", len(kdks))
 	}

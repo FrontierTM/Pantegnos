@@ -188,7 +188,7 @@ func unwrapAppKey(a *npvsAppKeyWrap) ([]byte, error) {
 		return nil, fmt.Errorf("wrap must be %d bytes", npvsWrapSize)
 	}
 
-	kdks := custodianKDKAll(salt)
+	kdks := custodianKDKs(salt)
 	if len(kdks) == 0 {
 		return nil, fmt.Errorf("whitebox KDK derivation failed")
 	}
