@@ -1,11 +1,13 @@
-name: Pantegnos Manual Release
+name: Pantegnos Release
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   release:
-    name: Build and Create Unified Release
+    name: Build and Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,21 +24,6 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
-
-      - name: Auto Increment Semver
-        uses: MCKanpolat/auto-semver-action@v2
-        id: versioning
-        with:
-          releaseType: patch
-          incrementPerCommit: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag release
-        run: |
-          git tag "v${{ steps.versioning.outputs.version }}"
-          git push origin "v${{ steps.versioning.outputs.version }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
