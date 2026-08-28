@@ -2,3 +2,11 @@
 /configs/
 /out/
 /output/
+
+# Local WASM build artifacts (produced by CI for GitHub Pages)
+/web/pantegnos.wasm
+/web/wasm_exec.js
+
+# IDE
+.idea/
+*.exe

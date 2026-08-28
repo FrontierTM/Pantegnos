@@ -25,6 +25,29 @@ A command-line decryptor for VPN and proxy configuration files used by various A
 
 SlipNet profiles support schema versions 1 through 28, covering fields like VLESS, SSH tunneling, SOCKS5, DoH, SNI fragmentation, and more.
 
+## Web Decryptor
+
+The full decryptor also runs in your browser — no install, files never leave your machine:
+
+**[frontiertm.github.io/Pantegnos](https://frontiertm.github.io/Pantegnos/)**
+
+The page hosts the same Go decryption core compiled to WebAssembly (`GOOS=js GOARCH=wasm ./cmd/wasm`), built and published automatically by GitHub Actions from the `web/` directory.
+
+To build and serve it locally:
+
+```bash
+# Build the WASM bundle
+GOOS=js GOARCH=wasm go build -o web/pantegnos.wasm ./cmd/wasm
+
+# Copy the Go WASM runtime glue (path is GOROOT-dependent)
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/wasm_exec.js
+
+# Serve with any static file server, e.g.
+python -m http.server -d web 8000
+```
+
+`web/pantegnos.wasm` and `web/wasm_exec.js` are build artifacts and are not committed; CI regenerates them on every push to `main`.
+
 ## Usage
 
 1. Place your encrypted config files in a `configs/` directory (or use `-input` to specify one).
@@ -50,17 +73,17 @@ chmod +x Pantegnos
 Requires **Go 1.26.3** or later.
 
 ```bash
-go build -o pantegnos .
+go build -o pantegnos ./cmd/pantegnos
 ```
 
 For cross-compilation:
 
 ```bash
 # Linux
-GOOS=linux GOARCH=amd64 go build -o pantegnos-linux .
+GOOS=linux GOARCH=amd64 go build -o pantegnos-linux ./cmd/pantegnos
 
 # Windows
-GOOS=windows GOARCH=amd64 go build -o pantegnos-win.exe .
+GOOS=windows GOARCH=amd64 go build -o pantegnos-win.exe ./cmd/pantegnos
 ```
 
 Pre-built binaries are available in the [Releases](https://github.com/KernelDotDLL/Pantegnos/releases) section.
