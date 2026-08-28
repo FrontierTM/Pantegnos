@@ -4,78 +4,236 @@ import (
 	"Pantegnos/modules"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"syscall"
 
-	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/term"
 )
 
-type PassphraseConfig struct {
+const (
+	npvsWrapSize  = 60
+	npvsSaltSize  = 16
+	npvsKdfAppKey = "wbaes-ctr-sha256"
+	npvsKdfPass   = "pbkdf2-hmac-sha256"
+	npvsKeyGen    = 1
+	npvsMinIters  = 1
+	npvsMaxIters  = 10000000
+)
+
+type npvsPassphraseWrap struct {
 	Iters int    `json:"iters"`
 	Kdf   string `json:"kdf"`
 	Salt  string `json:"salt"`
 	Wrap  string `json:"wrap"`
 }
 
-type NPVSConfig struct {
-	ConfigID   string           `json:"configId"`
-	Passphrase PassphraseConfig `json:"passphrase"`
-	V          int              `json:"v"`
+type npvsAppKeyWrap struct {
+	Kdf   string `json:"kdf"`
+	KeyID int    `json:"keyId"`
+	Salt  string `json:"salt"`
+	Wrap  string `json:"wrap"`
+}
+
+type npvsHeader struct {
+	V        int    `json:"v"`
+	ConfigID string `json:"configId"`
+	IssuedAt string `json:"issuedAt"`
+	Creator  struct {
+		Fp string `json:"fp"`
+		Pk string `json:"pk"`
+	} `json:"creator"`
+	AppKey     *npvsAppKeyWrap     `json:"appKey"`
+	Passphrase *npvsPassphraseWrap `json:"passphrase"`
+	Recipients []json.RawMessage   `json:"recipients"`
+}
+
+type npvsEnvelope struct {
+	headerRaw []byte
+	hdr       npvsHeader
+	nonce     []byte
+	body      []byte
+	sig       []byte
+}
+
+func parseNpvVEnvelope(b []byte) (*npvsEnvelope, error) {
+	if len(b) < 89 {
+		return nil, fmt.Errorf("too short: %d bytes", len(b))
+	}
+	if b[0] != 'N' || b[1] != 'P' || b[2] != 'V' || b[3] != 'S' {
+		return nil, fmt.Errorf("bad magic")
+	}
+	if b[4] > 1 {
+		return nil, fmt.Errorf("unsupported version %d", b[4])
+	}
+
+	hdrLen := int(binary.BigEndian.Uint32(b[5:9]))
+	if hdrLen < 0 || 9+hdrLen > len(b) {
+		return nil, fmt.Errorf("invalid header length: %d", hdrLen)
+	}
+
+	e := &npvsEnvelope{headerRaw: b[9 : 9+hdrLen]}
+	if err := json.Unmarshal(e.headerRaw, &e.hdr); err != nil {
+		return nil, fmt.Errorf("header parse: %w", err)
+	}
+
+	off := 9 + hdrLen
+	if off+12+4 > len(b) {
+		return nil, fmt.Errorf("truncated body nonce/length")
+	}
+	e.nonce = b[off : off+12]
+	bodyLen := int(binary.BigEndian.Uint32(b[off+12 : off+16]))
+	off += 16
+
+	if bodyLen < 16 || off+bodyLen+64 > len(b) {
+		return nil, fmt.Errorf("invalid body length: %d", bodyLen)
+	}
+	e.body = b[off : off+bodyLen]
+	e.sig = b[off+bodyLen : off+bodyLen+64]
+
+	return e, nil
 }
 
 func init() {
 	modules.Register(modules.Module{
-		Name:      "Npv Tunnel V2ray/SSH (.npvs)",
-		ApkAuthor: "https://play.google.com/store/apps/details?id=com.napsternetlabs.napsternetv",
+		Name:      "NPV Tunnel v2ray/ssh config export (.npvs)",
+		ApkAuthor: "com.vonmatrix.npvtunnel",
 		Proto:     []string{"NPVS"},
 		Extension: ".npvs",
-		Exec: func(proto, payload, extension, file, outputDir string) {
-			fileBytes, err := os.ReadFile(file)
-			if err != nil {
-				fmt.Println("error loading file:", err)
-				os.Exit(1)
-			}
-
-			outputFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".npvs")+".txt")
-
-			pt, err := decryptNPVS(fileBytes)
-			if err != nil {
-				fmt.Println("  decrypt error:", err)
-				return
-			}
-
-			re := regexp.MustCompile(`npvs1:([A-Za-z0-9+/=]+)`)
-			processedContent := re.ReplaceAllStringFunc(string(pt), func(match string) string {
-				sub := re.FindStringSubmatch(match)
-				if len(sub) < 2 {
-					return match
-				}
-				b64 := sub[1]
-				if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
-					return string(decoded)
-				}
-				if decoded, err := base64.URLEncoding.DecodeString(b64); err == nil {
-					return string(decoded)
-				}
-				return match
-			})
-
-			if err := os.WriteFile(outputFile, []byte(processedContent), 0644); err != nil {
-				fmt.Printf("Error writing to %s: %v\n", outputFile, err)
-				return
-			}
-
-			fmt.Println(processedContent)
-		},
+		Exec:      runNPVS,
 	})
+}
+
+func runNPVS(proto, payload, extension, file, outputDir string) {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		fmt.Println("error loading file:", err)
+		return
+	}
+
+	pt, keys, err := decryptNPVSFull(raw)
+	if err != nil {
+		fmt.Println("  decrypt error:", err)
+		return
+	}
+
+	outText := decodeNpvSentinels(string(pt))
+
+	var sb strings.Builder
+	sb.WriteString(outText)
+	sb.WriteString("\n\n// ---- recovered key material ----\n")
+	for _, kv := range keys {
+		fmt.Fprintf(&sb, "// %s: %s\n", kv[0], kv[1])
+	}
+
+	outFile := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(file), ".npvs")+".txt")
+	if err := os.WriteFile(outFile, []byte(sb.String()), 0644); err != nil {
+		fmt.Printf("error writing %s: %v\n", outFile, err)
+	}
+
+	fmt.Println(outText)
+}
+
+func decryptNPVSFull(raw []byte) (pt []byte, keys [][2]string, err error) {
+	env, err := parseNpvVEnvelope(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	keys = append(keys,
+		[2]string{"configId", env.hdr.ConfigID},
+		[2]string{"creator.fp", env.hdr.Creator.Fp},
+		[2]string{"creator.pk", env.hdr.Creator.Pk},
+	)
+
+	var dek []byte
+	switch {
+	case env.hdr.AppKey != nil:
+		dek, err = unwrapAppKey(env.hdr.AppKey)
+	case env.hdr.Passphrase != nil:
+		dek, err = unwrapPassphrase(env.hdr.Passphrase)
+	case len(env.hdr.Recipients) > 0:
+		err = fmt.Errorf("envelope uses recipient ECDH wraps; recipient private key required")
+	default:
+		err = fmt.Errorf("no supported unwrap target (no appKey, no passphrase)")
+	}
+	if err != nil {
+		return nil, keys, err
+	}
+	keys = append(keys, [2]string{"DEK/CEK (hex)", hex.EncodeToString(dek)})
+
+	body, err := chachaOpen(dek, env.nonce, env.body, env.headerRaw)
+	if err != nil {
+		return nil, keys, fmt.Errorf("payload decrypt failed: %w", err)
+	}
+
+	return body, keys, nil
+}
+
+func unwrapAppKey(a *npvsAppKeyWrap) ([]byte, error) {
+	if a.Kdf != npvsKdfAppKey {
+		return nil, fmt.Errorf("unsupported appkey kdf %q", a.Kdf)
+	}
+	if a.KeyID != npvsKeyGen {
+		return nil, fmt.Errorf("no custodian for generation %d", a.KeyID)
+	}
+
+	salt, err := b64UrlNoPad(a.Salt)
+	if err != nil {
+		return nil, err
+	}
+	if len(salt) != npvsSaltSize {
+		return nil, fmt.Errorf("salt must be %d bytes", npvsSaltSize)
+	}
+
+	wrap, err := b64UrlNoPad(a.Wrap)
+	if err != nil {
+		return nil, err
+	}
+	if len(wrap) != npvsWrapSize {
+		return nil, fmt.Errorf("wrap must be %d bytes", npvsWrapSize)
+	}
+
+	kdk := custodianKDK(salt)
+	if kdk == nil {
+		return nil, fmt.Errorf("whitebox KDK derivation failed")
+	}
+	return chachaOpen(kdk, wrap[:12], wrap[12:], salt)
+}
+
+func unwrapPassphrase(p *npvsPassphraseWrap) ([]byte, error) {
+	if p.Kdf != npvsKdfPass {
+		return nil, fmt.Errorf("unsupported passphrase kdf %q", p.Kdf)
+	}
+	if p.Iters < npvsMinIters || p.Iters > npvsMaxIters {
+		return nil, fmt.Errorf("bad iteration count %d", p.Iters)
+	}
+
+	salt, err := b64UrlNoPad(p.Salt)
+	if err != nil {
+		return nil, err
+	}
+
+	wrap, err := b64UrlNoPad(p.Wrap)
+	if err != nil {
+		return nil, err
+	}
+	if len(wrap) != npvsWrapSize {
+		return nil, fmt.Errorf("wrap must be %d bytes", npvsWrapSize)
+	}
+
+	pw, err := promptForPassword()
+	if err != nil {
+		return nil, err
+	}
+
+	derived := customPBKDF2HmacSha256(pw, salt, p.Iters, 32)
+	return chachaOpen(derived, wrap[:12], wrap[12:], salt)
 }
 
 func promptForPassword() ([]byte, error) {
@@ -83,8 +241,7 @@ func promptForPassword() ([]byte, error) {
 		fmt.Print("Enter .npvs password: ")
 		if pw, err := term.ReadPassword(int(syscall.Stdin)); err == nil {
 			fmt.Println()
-			password := strings.TrimSpace(string(pw))
-			if password != "" {
+			if password := strings.TrimSpace(string(pw)); password != "" {
 				return []byte(password), nil
 			}
 		}
@@ -93,21 +250,10 @@ func promptForPassword() ([]byte, error) {
 	fmt.Print("Enter .npvs password (visible): ")
 	var input string
 	_, _ = fmt.Scanln(&input)
-	password := strings.TrimSpace(input)
-	if password == "" {
-		return nil, fmt.Errorf("password cannot be empty")
+	if password := strings.TrimSpace(input); password != "" {
+		return []byte(password), nil
 	}
-	return []byte(password), nil
-}
-
-func base64URLDecode(input string) ([]byte, error) {
-	switch len(input) % 4 {
-	case 2:
-		input += "=="
-	case 3:
-		input += "="
-	}
-	return base64.URLEncoding.DecodeString(input)
+	return nil, fmt.Errorf("password cannot be empty")
 }
 
 func customPBKDF2HmacSha256(passphraseBytes, salt []byte, iterations, dkLen int) []byte {
@@ -144,70 +290,4 @@ func customPBKDF2HmacSha256(passphraseBytes, salt []byte, iterations, dkLen int)
 	}
 
 	return out
-}
-
-func unwrapDEK(wrapKey, wrapBytes, saltBytes []byte) ([]byte, error) {
-	if len(wrapBytes) < 12 {
-		return nil, fmt.Errorf("wrap bytes too short")
-	}
-	aead, err := chacha20poly1305.New(wrapKey)
-	if err != nil {
-		return nil, err
-	}
-	return aead.Open(nil, wrapBytes[:12], wrapBytes[12:], saltBytes)
-}
-
-func decryptNPVS(fileBytes []byte) ([]byte, error) {
-	if len(fileBytes) < 89 || fileBytes[4] != 1 {
-		return nil, fmt.Errorf("invalid file format or unsupported version")
-	}
-
-	headerLen := int(binary.BigEndian.Uint32(fileBytes[5:9]))
-	headerEnd := 9 + headerLen
-
-	bArrR := fileBytes[9:headerEnd]
-	var config NPVSConfig
-	if err := json.Unmarshal(bArrR, &config); err != nil {
-		return nil, err
-	}
-
-	if len(fileBytes) < headerEnd+16 {
-		return nil, fmt.Errorf("file too short for payload envelope")
-	}
-
-	nonce := fileBytes[headerEnd : headerEnd+12]
-	bodyLen := int(binary.BigEndian.Uint32(fileBytes[headerEnd+12 : headerEnd+16]))
-	cipherEnd := headerEnd + 16 + bodyLen
-
-	if len(fileBytes) < cipherEnd {
-		return nil, fmt.Errorf("malformed file: payload exceeds file size")
-	}
-	ciphertext := fileBytes[headerEnd+16 : cipherEnd]
-
-	salt, err := base64URLDecode(config.Passphrase.Salt)
-	if err != nil {
-		return nil, err
-	}
-	wrapBytes, err := base64URLDecode(config.Passphrase.Wrap)
-	if err != nil {
-		return nil, err
-	}
-
-	pw, err := promptForPassword()
-	if err != nil {
-		return nil, err
-	}
-
-	derived := customPBKDF2HmacSha256(pw, salt, config.Passphrase.Iters, 32)
-	dek, err := unwrapDEK(derived, wrapBytes, salt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unwrap DEK. Check if the passphrase is correct")
-	}
-
-	aead, err := chacha20poly1305.New(dek)
-	if err != nil {
-		return nil, err
-	}
-
-	return aead.Open(nil, nonce, ciphertext, bArrR)
 }
