@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pantegnos — Web Decryptor</title>
+<style>
+  :root {
+    --bg: #120c08;
+    --surface: #1d140c;
+    --border: #3d2a1a;
+    --text: #ede4d8;
+    --muted: #a89483;
+    --accent: #ff9e3d;
+    --accent-hot: #ff6b1a;
+    --error: #ff5353;
+    --ok: #7adf72;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+  }
+
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 64px;
+  }
+
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    background: linear-gradient(90deg, var(--accent), var(--accent-hot));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  header .tagline {
+    margin: 0 0 8px;
+    color: var(--muted);
+  }
+
+  header nav {
+    font-size: 0.9rem;
+  }
+
+  header nav a {
+    color: var(--accent);
+    margin-right: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-top: 28px;
+  }
+
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+
+  #dropzone:hover, #dropzone.dragover {
+    border-color: var(--accent);
+  }
+
+  #dropzone .hint {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  #fileinfo {
+    margin: 16px 0 0;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.9rem;
+  }
+
+  .row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+
+  #pwrow { display: none; }
+
+  label {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  input[type="password"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    min-width: 240px;
+    font: inherit;
+  }
+
+  input[type="password"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  button {
+    background: linear-gradient(90deg, var(--accent), var(--accent-hot));
+    border: none;
+    color: #1a0f05;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 11px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  button.ghost:hover {
+    border-color: var(--accent);
+  }
+
+  #status {
+    min-height: 1.4em;
+    margin-top: 14px;
+    font-size: 0.9rem;
+  }
+
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--error); }
+  #status.busy { color: var(--muted); }
+
+  #outputcard { display: none; }
+
+  pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow: auto;
+    max-height: 480px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.85rem;
+    margin: 16px 0;
+  }
+
+  footer {
+    margin-top: 40px;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+  }
+
+  .badge {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PANTEGNOS</h1>
+    <p class="tagline">In-browser decryptor for VPN / proxy app config files. Everything runs locally — your files are never uploaded.</p>
+    <nav>
+      <a href="https://github.com/FrontierTM/Pantegnos">GitHub</a>
+      <a href="https://github.com/FrontierTM/Pantegnos/releases">CLI Releases</a>
+    </nav>
+    <div class="badges">
+      <span class="badge">.slip</span>
+      <span class="badge">.ehi</span>
+      <span class="badge">.dark</span>
+      <span class="badge">.hat</span>
+      <span class="badge">.npvt</span>
+      <span class="badge">.npvs</span>
+      <span class="badge">.nm</span>
+      <span class="badge">.happ</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div id="dropzone" tabindex="0" role="button" aria-label="Choose or drop a config file">
+        <strong>Drop a config file here</strong>
+        <div class="hint">or click to browse (.slip, .ehi, .dark, .hat, .npvt, .npvs, .nm, .happ)</div>
+        <input type="file" id="file" style="display:none"
+               accept=".slip,.ehi,.dark,.hat,.npvt,.npvs,.nm,.happ">
+        <div id="fileinfo"></div>
+      </div>
+
+      <div class="row" id="pwrow">
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="off" placeholder="Required for this file">
+      </div>
+
+      <div class="row">
+        <button id="decrypt" disabled>Decrypt</button>
+      </div>
+
+      <div id="status" role="status"></div>
+    </div>
+
+    <div class="card" id="outputcard">
+      <div class="row" style="margin-top:0">
+        <button class="ghost" id="copy">Copy</button>
+        <button class="ghost" id="download">Download</button>
+      </div>
+      <pre id="output"></pre>
+    </div>
+  </main>
+
+  <footer>
+    Pantegnos is provided as-is for security research purposes. Ensure your use complies with applicable laws.
+  </footer>
+</div>
+
+<script src="wasm_exec.js"></script>
+<script>
+  "use strict";
+
+  const el = {
+    dropzone: document.getElementById("dropzone"),
+    file: document.getElementById("file"),
+    fileinfo: document.getElementById("fileinfo"),
+    pwrow: document.getElementById("pwrow"),
+    password: document.getElementById("password"),
+    decrypt: document.getElementById("decrypt"),
+    status: document.getElementById("status"),
+    outputcard: document.getElementById("outputcard"),
+    output: document.getElementById("output"),
+    copy: document.getElementById("copy"),
+    download: document.getElementById("download"),
+  };
+
+  let wasmReady = false;
+  let currentFile = null;   // { name, bytes }
+  let currentResult = null; // { text, fileName }
+
+  function setStatus(text, cls) {
+    el.status.textContent = text;
+    el.status.className = cls || "";
+  }
+
+  async function bootWASM() {
+    setStatus("Loading engine…", "busy");
+
+    try {
+      const go = new Go();
+      const response = WebAssembly.instantiateStreaming(fetch("pantegnos.wasm"), go.importObject);
+      const { instance } = await response;
+      go.run(instance);
+
+      wasmReady = true;
+      updateDecryptState();
+      setStatus("Engine ready.");
+    } catch (err) {
+      setStatus("Failed to load the WASM engine: " + err, "err");
+    }
+  }
+
+  function updateDecryptState() {
+    el.decrypt.disabled = !(wasmReady && currentFile);
+  }
+
+  async function selectFile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    currentFile = { name: file.name, bytes };
+    el.fileinfo.textContent = file.name + " — " + file.size + " bytes";
+    el.outputcard.style.display = "none";
+    currentResult = null;
+
+    if (wasmReady && pantegnosNeedsPassword(file.name, bytes)) {
+      el.pwrow.style.display = "flex";
+      el.password.focus();
+    } else {
+      el.pwrow.style.display = "none";
+      el.password.value = "";
+    }
+
+    updateDecryptState();
+    setStatus("");
+  }
+
+  function decrypt() {
+    if (!currentFile) return;
+
+    setStatus("Decrypting…", "busy");
+
+    // Defer one frame so the busy status paints before heavy crypto runs.
+    setTimeout(() => {
+      const result = pantegnosDecrypt(currentFile.name, currentFile.bytes, el.password.value);
+
+      if (!result.ok) {
+        setStatus("Decryption failed: " + result.error, "err");
+        return;
+      }
+
+      currentResult = result;
+      el.output.textContent = result.text;
+      el.outputcard.style.display = "block";
+      setStatus("Decrypted: " + result.fileName, "ok");
+    }, 0);
+  }
+
+  el.dropzone.addEventListener("click", () => el.file.click());
+  el.dropzone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") el.file.click();
+  });
+
+  el.file.addEventListener("change", () => {
+    if (el.file.files.length) selectFile(el.file.files[0]);
+  });
+
+  ["dragenter", "dragover"].forEach(ev =>
+    el.dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      el.dropzone.classList.add("dragover");
+    })
+  );
+
+  ["dragleave", "drop"].forEach(ev =>
+    el.dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      el.dropzone.classList.remove("dragover");
+    })
+  );
+
+  el.dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) selectFile(file);
+  });
+
+  el.decrypt.addEventListener("click", decrypt);
+
+  el.copy.addEventListener("click", async () => {
+    if (!currentResult) return;
+    await navigator.clipboard.writeText(currentResult.text);
+    setStatus("Copied to clipboard.", "ok");
+  });
+
+  el.download.addEventListener("click", () => {
+    if (!currentResult) return;
+
+    const blob = new Blob([currentResult.text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = currentResult.fileName || (currentFile ? currentFile.name + ".txt" : "pantegnos.txt");
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  bootWASM();
+</script>
+</body>
+</html>
