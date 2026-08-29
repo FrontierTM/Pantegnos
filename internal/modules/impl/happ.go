@@ -63,7 +63,7 @@ func init() {
 				return modules.Result{}, fmt.Errorf("failed to initialize Happ cryptographic engine: %w", err)
 			}
 
-			result, err := engine.Decrypt(req.Payload)
+			result, err := engine.Decrypt(strings.TrimSpace(req.Payload))
 			if err != nil {
 				return modules.Result{}, err
 			}

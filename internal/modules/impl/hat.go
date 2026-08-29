@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"Pantegnos/internal/modules"
 )
@@ -20,7 +21,7 @@ func init() {
 		Proto:     []string{""},
 		Extension: ".hat",
 		Decrypt: func(req modules.Request) (modules.Result, error) {
-			ciphertext, err := base64.StdEncoding.DecodeString(req.Payload)
+			ciphertext, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Payload))
 			if err != nil {
 				return modules.Result{}, fmt.Errorf("base64 decode: %v", err)
 			}

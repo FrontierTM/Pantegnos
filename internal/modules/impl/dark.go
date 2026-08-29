@@ -31,7 +31,7 @@ func init() {
 		Proto:     []string{"darktunnel"},
 		Extension: ".dark",
 		Decrypt: func(req modules.Request) (modules.Result, error) {
-			text, err := DecryptDark(req.Payload)
+			text, err := DecryptDark(strings.TrimSpace(req.Payload))
 			if err != nil {
 				return modules.Result{}, err
 			}

@@ -81,14 +81,14 @@ func decryptSlipNet(req modules.Request) (modules.Result, error) {
 		}, nil
 
 	case "slipnet":
-		data, err := base64.StdEncoding.DecodeString(req.Payload)
+		data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Payload))
 		if err != nil {
 			return modules.Result{}, fmt.Errorf("base64 decode: %v", err)
 		}
 		return modules.Result{Text: parseProfile(string(data)), Echo: true}, nil
 
 	default:
-		decrypted, err := decryptBlob(KEY_HEX, req.Payload)
+		decrypted, err := decryptBlob(KEY_HEX, strings.TrimSpace(req.Payload))
 		if err != nil {
 			return modules.Result{}, err
 		}
