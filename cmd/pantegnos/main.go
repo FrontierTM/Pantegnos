@@ -125,10 +125,6 @@ func processFile(path string) {
 		fmt.Print(utils.ColorizeGradientText("Enter password: ", colorgrad.Oranges()))
 		password = promptPassword()
 		fmt.Println()
-		if password == "" {
-			fmt.Println("[!] Password cannot be empty")
-			return
-		}
 	}
 
 	fmt.Printf("[Success] Module '%s' handling file: %s\n", mod.Name, path)
