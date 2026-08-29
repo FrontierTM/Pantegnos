@@ -35,6 +35,15 @@ type npvsAppKeyWrap struct {
 	Wrap  string `json:"wrap"`
 }
 
+type npvsConfigPolicy struct {
+	AttestationLevel    string  `json:"attestationLevel"`
+	ConfigVersion       int     `json:"configVersion"`
+	CustomServerMessage string  `json:"customServerMessage"`
+	DisplayMessage      string  `json:"displayMessage"`
+	ExpiresAt           *string `json:"expiresAt"`
+	OnlyMobileNetwork   bool    `json:"onlyMobileNetwork"`
+}
+
 type npvsHeader struct {
 	V        int    `json:"v"`
 	ConfigID string `json:"configId"`
@@ -45,6 +54,7 @@ type npvsHeader struct {
 	} `json:"creator"`
 	AppKey     *npvsAppKeyWrap     `json:"appKey"`
 	Passphrase *npvsPassphraseWrap `json:"passphrase"`
+	Policy     npvsConfigPolicy    `json:"policy"`
 	Recipients []json.RawMessage   `json:"recipients"`
 }
 
@@ -102,19 +112,29 @@ func init() {
 		Extension: ".npvs",
 		NeedsPassword: func(_, payload string) bool {
 			env, err := parseNpvVEnvelope([]byte(payload))
-			return err == nil && env.hdr.Passphrase != nil
+			return err == nil && env.needsPassphrase()
 		},
 		Decrypt: decryptNPVS,
 	})
 }
 
 func decryptNPVS(req modules.Request) (modules.Result, error) {
-	pt, keys, err := decryptNPVSFull(req.Data, req.Password)
+	env, err := parseNpvVEnvelope(req.Data)
 	if err != nil {
 		return modules.Result{}, err
 	}
 
+	pt, keys, err := decryptEnvelope(env, req.Password)
+	if err != nil {
+		return modules.Result{}, env.passphraseHint(err)
+	}
+
 	var sb strings.Builder
+	if msg := env.creatorMessage(); msg != "" {
+		sb.WriteString("// ---- creator message ----\n")
+		sb.WriteString(msg)
+		sb.WriteString("\n\n")
+	}
 	sb.WriteString(decodeNpvSentinels(string(pt)))
 	sb.WriteString("\n\n// ---- recovered key material ----\n")
 	for _, kv := range keys {
@@ -128,12 +148,29 @@ func decryptNPVS(req modules.Request) (modules.Result, error) {
 	}, nil
 }
 
-func decryptNPVSFull(raw []byte, password string) (pt []byte, keys [][2]string, err error) {
-	env, err := parseNpvVEnvelope(raw)
-	if err != nil {
-		return nil, nil, err
-	}
+func (e *npvsEnvelope) needsPassphrase() bool {
+	return e.hdr.Passphrase != nil && e.hdr.AppKey == nil
+}
 
+func (e *npvsEnvelope) creatorMessage() string {
+	var parts []string
+	for _, m := range []string{e.hdr.Policy.DisplayMessage, e.hdr.Policy.CustomServerMessage} {
+		if m = strings.TrimSpace(strings.ReplaceAll(m, "\r\n", "\n")); m != "" {
+			parts = append(parts, m)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (e *npvsEnvelope) passphraseHint(err error) error {
+	if !e.needsPassphrase() {
+		return err
+	}
+	return fmt.Errorf("%w\n[!] this config is passphrase-protected; whoever shared it must provide the passphrase (creator message: %q)",
+		err, e.creatorMessage())
+}
+
+func decryptEnvelope(env *npvsEnvelope, password string) (pt []byte, keys [][2]string, err error) {
 	keys = append(keys,
 		[2]string{"configId", env.hdr.ConfigID},
 		[2]string{"creator.fp", env.hdr.Creator.Fp},
@@ -208,7 +245,7 @@ func unwrapPassphrase(p *npvsPassphraseWrap, password string) ([]byte, error) {
 		return nil, fmt.Errorf("bad iteration count %d", p.Iters)
 	}
 	if password == "" {
-		return nil, fmt.Errorf("password cannot be empty")
+		return nil, fmt.Errorf("passphrase required to open this config")
 	}
 
 	salt, err := b64UrlNoPad(p.Salt)
@@ -225,7 +262,11 @@ func unwrapPassphrase(p *npvsPassphraseWrap, password string) ([]byte, error) {
 	}
 
 	derived := customPBKDF2HmacSha256([]byte(password), salt, p.Iters, 32)
-	return chachaOpen(derived, wrap[:12], wrap[12:], salt)
+	dek, err := chachaOpen(derived, wrap[:12], wrap[12:], salt)
+	if err != nil {
+		return nil, fmt.Errorf("incorrect passphrase")
+	}
+	return dek, nil
 }
 
 func customPBKDF2HmacSha256(passphraseBytes, salt []byte, iterations, dkLen int) []byte {
