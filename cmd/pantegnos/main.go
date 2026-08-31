@@ -1,8 +1,6 @@
 package main
 
 import (
-	"Pantegnos/internal/modules"
-	"Pantegnos/internal/utils"
 	"flag"
 	"fmt"
 	"os"
@@ -14,100 +12,101 @@ import (
 	"github.com/muesli/termenv"
 	"golang.org/x/term"
 
+	"Pantegnos/internal/modules"
+	"Pantegnos/internal/utils"
+
 	_ "Pantegnos/internal/modules/impl"
 )
 
-var (
-	InputDir  string
-	OutputDir string
-	terminal  = termenv.NewOutput(os.Stdout)
+// version is set by goreleaser via -ldflags "-X main.version=...".
+var version = "dev"
 
-	// version is set by goreleaser via -ldflags "-X main.version=...".
-	version = "dev"
+var (
+	inputDir  = flag.String("input", "configs", "input directory containing config files")
+	outputDir = flag.String("output", "output", "directory to save decrypted files")
 )
 
 const banner = `
-░█████████                           ░██
-░██     ░██                          ░██
-░██     ░██  ░██████   ░████████  ░████████  ░███████   ░████████ ░████████   ░███████   ░███████
-░█████████        ░██  ░██    ░██    ░██    ░██    ░██ ░██    ░██ ░██    ░██ ░██    ░██ ░██
-░██          ░███████  ░██    ░██    ░██    ░█████████ ░██    ░██ ░██    ░██ ░██    ░██  ░███████
-░██         ░██   ░██  ░██    ░██    ░██    ░██        ░██   ░███ ░██    ░██ ░██    ░██        ░██
-░██          ░█████░██ ░██    ░██     ░████  ░███████   ░█████░██ ░██    ░██  ░███████   ░███████
-                                                              ░██
-                                                        ░███████
-																	(c) 2026 | KernelDotDLL
-`
+██████╗  █████╗ ███╗   ██╗████████╗███████╗ ██████╗ ███╗   ██╗ ██████╗ ███████╗
+██╔══██╗██╔══██╗████╗  ██║╚══██╔══╝██╔════╝██╔════╝ ████╗  ██║██╔═══██╗██╔════╝
+██████╔╝███████║██╔██╗ ██║   ██║   █████╗  ██║  ███╗██╔██╗ ██║██║   ██║███████╗
+██╔═══╝ ██╔══██║██║╚██╗██║   ██║   ██╔══╝  ██║   ██║██║╚██╗██║██║   ██║╚════██║
+██║     ██║  ██║██║ ╚████║   ██║   ███████╗╚██████╔╝██║ ╚████║╚██████╔╝███████║
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
+                                                              (c) 2026 KernelDotDLL`
+
 const disclaimer = `
-		┌─────────────────────────── [    T\[T]/T    ] ───────────────────────────┐
-		│ PANTEGNOS :: Multi-Config Decryptor v%s                                  │           
-		├─────────────────────────────────────────────────────────────────────────┤
-		│ SUPPORTED: .nm, .slip (v28), any many more soon..                       │             
-		├─────────────────────────────────────────────────────────────────────────┤
-		│ [!] LEGAL NOTICE & LIABILITY WAIVER                                     │
-		│                                                                         │
-		│ The user of this software assumes all responsibility and risk for its   │
-		│ application. This tool is provided "as-is" without any warranties.      │
-		│                                                                         │
-		│ The author (KernelDotDLL) shall not be held liable for any damages,     │
-		│ legal consequences, or misuse arising from the operation of this        │
-		│ software. It is the user's sole obligation to ensure that all actions   │
-		│ comply with local, state, and international regulations.                │
-		└─────────────────────────────────────────────────────────────────────────┘`
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │ PANTEGNOS :: Multi-Config Decryptor v%-32s                            │
+  ├───────────────────────────────────────────────────────────────────────┤
+  │ SUPPORTED: .slip  .ehi  .dark  .hat  .npvt  .npvs  .nm  .happ         │
+  ├───────────────────────────────────────────────────────────────────────┤
+  │ LEGAL NOTICE & LIABILITY WAIVER                                       │
+  │                                                                       │
+  │ The user of this software assumes all responsibility and risk for its │
+  │ application. This tool is provided "as-is" without any warranties.    │
+  │                                                                       │
+  │ The author (KernelDotDLL) shall not be held liable for any damages,   │
+  │ legal consequences, or misuse arising from the operation of this      │
+  │ software. It is the user's sole obligation to ensure that all actions │
+  │ comply with local, state, and international regulations.              │
+  └───────────────────────────────────────────────────────────────────────┘`
 
-func init() {
-	terminal.ClearScreen()
-	terminal.DisableMouse()
+func main() {
+	printBanner()
 
-	fmt.Println(utils.ColorizeGradientText(banner, colorgrad.Oranges()))
-	fmt.Println(utils.ColorizeGradientText(fmt.Sprintf(disclaimer, version), colorgrad.Reds()))
-
-	flag.StringVar(&InputDir, "input", "configs", "Input directory containing .nm files")
-	flag.StringVar(&OutputDir, "output", "output", "Directory to save decrypted files")
-	flag.Parse()
 	flag.Usage = func() {
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
-}
+	flag.Parse()
 
-func main() {
-	if err := os.MkdirAll("configs", 0755); err != nil {
-		panic(err)
+	if err := os.MkdirAll(*inputDir, 0o755); err != nil {
+		fatal("Error with input directory %s: %v", *inputDir, err)
 	}
-	if err := os.MkdirAll("output", 0755); err != nil {
-		panic(err)
+	if err := os.MkdirAll(*outputDir, 0o755); err != nil {
+		fatal("Error creating output directory %s: %v", *outputDir, err)
 	}
 
-	entries, err := os.ReadDir(InputDir)
+	entries, err := os.ReadDir(*inputDir)
 	if err != nil {
-		fmt.Printf("Error reading directory %s: %v\n", InputDir, err)
-		return
+		fatal("Error reading directory %s: %v", *inputDir, err)
 	}
 
-	if err := os.MkdirAll(OutputDir, os.ModePerm); err != nil {
-		fmt.Println("Error creating output directory:", err)
-		return
-	}
-
+	succeeded := 0
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		processFile(filepath.Join(InputDir, entry.Name()))
+		if processFile(filepath.Join(*inputDir, entry.Name())) {
+			succeeded++
+		}
 	}
 
-	fmt.Println("All files processed.")
-	time.Sleep(time.Second * 5)
+	fmt.Printf("All files processed. (%d succeeded)\n", succeeded)
+	time.Sleep(5 * time.Second)
 }
 
-func processFile(path string) {
+func printBanner() {
+	terminal := termenv.NewOutput(os.Stdout)
+	terminal.ClearScreen()
+	terminal.DisableMouse()
+	fmt.Println(utils.ColorizeGradientText(banner, colorgrad.Oranges()))
+	fmt.Println(utils.ColorizeGradientText(fmt.Sprintf(disclaimer, version), colorgrad.Reds()))
+}
+
+func fatal(format string, args ...any) {
+	fmt.Printf(format+"\n", args...)
+	os.Exit(1)
+}
+
+func processFile(path string) bool {
 	fmt.Println("Decrypting:", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Printf("Error reading %s: %v\n", path, err)
-		return
+		return false
 	}
 
 	mod, proto, payload := modules.Lookup(path, data)
@@ -117,7 +116,7 @@ func processFile(path string) {
 		} else {
 			fmt.Printf("No matching module found for file: %s\n", path)
 		}
-		return
+		return false
 	}
 
 	password := ""
@@ -138,7 +137,7 @@ func processFile(path string) {
 	})
 	if err != nil {
 		fmt.Printf("[!] Error decrypting %s: %v\n", path, err)
-		return
+		return false
 	}
 
 	if result.Echo {
@@ -146,20 +145,22 @@ func processFile(path string) {
 	}
 
 	if result.FileName == "" {
-		return
+		return true
 	}
 
-	outputFile := filepath.Join(OutputDir, result.FileName)
-	if err := os.WriteFile(outputFile, []byte(result.Text), 0644); err != nil {
-		fmt.Printf("Error writing %s: %v\n", outputFile, err)
-		return
+	outPath := filepath.Join(*outputDir, result.FileName)
+	if err := os.WriteFile(outPath, []byte(result.Text), 0o644); err != nil {
+		fmt.Printf("Error writing %s: %v\n", outPath, err)
+		return false
 	}
-	fmt.Printf("[+] Saved to: %s\n", outputFile)
+	fmt.Printf("[+] Saved to: %s\n", outPath)
+	return true
 }
 
 func promptPassword() string {
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fd := int(os.Stdin.Fd())
+	if term.IsTerminal(fd) {
+		pw, err := term.ReadPassword(fd)
 		if err == nil {
 			return strings.TrimSpace(string(pw))
 		}

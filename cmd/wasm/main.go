@@ -19,20 +19,21 @@ import (
 	_ "Pantegnos/internal/modules/impl"
 )
 
-var errBadCall = errors.New("usage: pantegnosDecrypt(fileName, data (Uint8Array), password)")
-
-var errNoModule = errors.New("no module supports this file type")
+var (
+	errBadCall  = errors.New("usage: pantegnosDecrypt(fileName, data (Uint8Array), password)")
+	errNoModule = errors.New("no module supports this file type")
+)
 
 func main() {
-	js.Global().Set("pantegnosDecrypt", js.FuncOf(wsDecrypt))
-	js.Global().Set("pantegnosNeedsPassword", js.FuncOf(wsNeedsPassword))
-
+	g := js.Global()
+	g.Set("pantegnosDecrypt", js.FuncOf(wsDecrypt))
+	g.Set("pantegnosNeedsPassword", js.FuncOf(wsNeedsPassword))
 	select {}
 }
 
 func wsDecrypt(_ js.Value, args []js.Value) any {
 	if len(args) < 3 {
-		return errorResult(errBadCall)
+		return fail(errBadCall)
 	}
 
 	fileName := args[0].String()
@@ -41,7 +42,7 @@ func wsDecrypt(_ js.Value, args []js.Value) any {
 
 	mod, proto, payload := modules.Lookup(fileName, data)
 	if mod == nil {
-		return errorResult(errNoModule)
+		return fail(errNoModule)
 	}
 
 	result, err := mod.Decrypt(modules.Request{
@@ -52,7 +53,7 @@ func wsDecrypt(_ js.Value, args []js.Value) any {
 		Password: password,
 	})
 	if err != nil {
-		return errorResult(err)
+		return fail(err)
 	}
 
 	return map[string]any{
@@ -67,19 +68,15 @@ func wsNeedsPassword(_ js.Value, args []js.Value) any {
 		return false
 	}
 
-	fileName := args[0].String()
-	data := copyBytes(args[1])
-
-	mod, proto, payload := modules.Lookup(fileName, data)
+	mod, proto, payload := modules.Lookup(args[0].String(), copyBytes(args[1]))
 	if mod == nil || mod.NeedsPassword == nil {
 		return false
 	}
-
 	return mod.NeedsPassword(proto, payload)
 }
 
 func copyBytes(v js.Value) []byte {
-	if v.Type() != js.TypeObject {
+	if v.Type() != js.TypeObject || v.Get("constructor").Get("name").String() != "Uint8Array" {
 		return nil
 	}
 	data := make([]byte, v.Get("length").Int())
@@ -87,6 +84,6 @@ func copyBytes(v js.Value) []byte {
 	return data
 }
 
-func errorResult(err error) map[string]any {
+func fail(err error) map[string]any {
 	return map[string]any{"ok": false, "error": err.Error()}
 }
