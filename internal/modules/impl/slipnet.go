@@ -88,7 +88,7 @@ func decryptSlipNet(req modules.Request) (modules.Result, error) {
 		return modules.Result{Text: parseProfile(string(data)), Echo: true}, nil
 
 	default:
-		decrypted, err := decryptBlob(KEY_HEX, strings.TrimSpace(req.Payload))
+		decrypted, err := decryptBlob(slipnetGCM, strings.TrimSpace(req.Payload))
 		if err != nil {
 			return modules.Result{}, err
 		}
@@ -110,15 +110,15 @@ func parseProfile(decryptedText string) string {
 	schema, exists := SCHEMAS[verStr]
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n[+] Detected Profile Version: %s\n", verStr))
-	sb.WriteString(fmt.Sprintf("%-30s | %s\n", "FIELD", "VALUE"))
-	sb.WriteString(strings.Repeat("-", 80) + "\n")
+	fmt.Fprintf(&sb, "\n[+] Detected Profile Version: %s\n%-30s | %s\n%s\n",
+		verStr, "FIELD", "VALUE", strings.Repeat("-", 80))
 
 	for i, value := range parts {
 		label := ""
 		if exists && i < len(schema) {
 			label = schema[i]
-		} else {
+		}
+		if label == "" {
 			label = fmt.Sprintf("Field %d", i)
 		}
 
@@ -127,45 +127,64 @@ func parseProfile(decryptedText string) string {
 			displayValue = "(empty)"
 		}
 
-		switch label {
-		case "Is Locked", "SSH TLS Enabled", "SSH WS Enabled", "SSH WS Use TLS",
-			"SNI Fragment Enabled", "CH Padding Enabled", "WS Header Obfuscation", "WS Padding Enabled":
+		if _, hit := lockedLabels[label]; hit {
 			if value == "1" {
 				displayValue = "🔒 YES / ✅ TRUE"
 			} else {
 				displayValue = "🔓 NO / ❌ FALSE"
 			}
-		case "VayDNS DNSTT Compat", "Resolvers Hidden", "GSO", "DNSTT Authoritative",
-			"SSH Enabled", "Forward DNS thru SSH", "Use Server DNS", "Allow Sharing", "NoizDNS Stealth":
+		} else if value != "" && isTrueFalseLabel(label) {
 			if value == "1" {
 				displayValue = "✅ TRUE"
 			} else {
 				displayValue = "❌ FALSE"
 			}
 		}
-		sb.WriteString(fmt.Sprintf("%-30s | %s\n", label, displayValue))
+		fmt.Fprintf(&sb, "%-30s | %s\n", label, displayValue)
 	}
 	return sb.String()
 }
 
-func decryptBlob(keyHex, blobStr string) (string, error) {
+var lockedLabels = map[string]struct{}{
+	"Is Locked": {}, "SSH TLS Enabled": {}, "SSH WS Enabled": {}, "SSH WS Use TLS": {},
+	"SNI Fragment Enabled": {}, "CH Padding Enabled": {}, "WS Header Obfuscation": {}, "WS Padding Enabled": {},
+}
+
+var trueFalseLabels = map[string]struct{}{
+	"VayDNS DNSTT Compat": {}, "Resolvers Hidden": {}, "GSO": {}, "DNSTT Authoritative": {},
+	"SSH Enabled": {}, "Forward DNS thru SSH": {}, "Use Server DNS": {}, "Allow Sharing": {}, "NoizDNS Stealth": {},
+}
+
+func isTrueFalseLabel(label string) bool {
+	_, ok := trueFalseLabels[label]
+	return ok
+}
+
+var slipnetGCM = mustGCM(KEY_HEX)
+
+func mustGCM(keyHex string) cipher.AEAD {
+	key, err := hex.DecodeString(keyHex)
+	if err != nil {
+		panic("slipnet: bad key hex: " + err.Error())
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic("slipnet: cipher init: " + err.Error())
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic("slipnet: gcm init: " + err.Error())
+	}
+	return aesgcm
+}
+
+func decryptBlob(aesgcm cipher.AEAD, blobStr string) (string, error) {
 	data, err := base64.StdEncoding.DecodeString(blobStr)
 	if err != nil {
 		return "", fmt.Errorf("base64 decode: %v", err)
 	}
 	if len(data) < 13 {
 		return "", fmt.Errorf("blob too short")
-	}
-
-	key, _ := hex.DecodeString(keyHex)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
 	}
 
 	nonce := data[1:13]
@@ -179,12 +198,20 @@ func decryptBlob(keyHex, blobStr string) (string, error) {
 }
 
 func decryptBundleBlob(blobStr string, password string) (string, error) {
-	cleanedBlob := strings.NewReplacer("\n", "", "\r", "", " ", "").Replace(blobStr)
+	cleaned := make([]byte, 0, len(blobStr))
+	for i := 0; i < len(blobStr); i++ {
+		c := blobStr[i]
+		if c != '\n' && c != '\r' && c != ' ' {
+			cleaned = append(cleaned, c)
+		}
+	}
 
-	data, err := base64.StdEncoding.DecodeString(cleanedBlob)
+	data := make([]byte, base64.StdEncoding.DecodedLen(len(cleaned)))
+	n, err := base64.StdEncoding.Decode(data, cleaned)
 	if err != nil {
 		return "", fmt.Errorf("bundle base64 decode: %v", err)
 	}
+	data = data[:n]
 
 	// Version(1) + Salt(16) + IV(12) + Tag overhead (16)
 	minRequiredLength := 1 + SALT_LENGTH + IV_LENGTH + 16

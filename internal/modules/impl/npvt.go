@@ -106,6 +106,11 @@ func walkJSON(v any, uris *[]string) {
 			walkJSON(v, uris)
 		}
 	case []any:
+		if cap(*uris)-len(*uris) < len(x) {
+			grown := make([]string, len(*uris), (len(*uris)+len(x))*2+8)
+			copy(grown, *uris)
+			*uris = grown
+		}
 		for _, v := range x {
 			walkJSON(v, uris)
 		}
@@ -222,13 +227,17 @@ func coreTransform(block [16]byte) [16]byte {
 func ctrCrypt(nonce [16]byte, data []byte) []byte {
 	counter := nonce
 	out := make([]byte, len(data))
-	var keystream [16]byte
-	for i := 0; i < len(data); i++ {
-		if i%16 == 0 {
-			keystream = coreTransform(counter)
-			ctrIncrement(&counter)
+	for off := 0; off < len(data); off += 16 {
+		keystream := coreTransform(counter)
+		ctrIncrement(&counter)
+		block := data[off:]
+		if len(block) > 16 {
+			block = block[:16]
 		}
-		out[i] = keystream[i%16] ^ data[i]
+		dst := out[off:]
+		for i, b := range block {
+			dst[i] = b ^ keystream[i]
+		}
 	}
 	return out
 }
@@ -330,6 +339,13 @@ type serversSettingsT struct {
 	Servers []serverEntryT `json:"servers"`
 }
 
+func wsHost(headers map[string]string) string {
+	if h, ok := headers["Host"]; ok && h != "" {
+		return h
+	}
+	return headers["host"]
+}
+
 func buildStreamQuery(ss *streamSettingsT) url.Values {
 	q := url.Values{}
 	network := ss.Network
@@ -350,9 +366,7 @@ func buildStreamQuery(ss *streamSettingsT) url.Values {
 			if ss.WSSettings.Path != "" {
 				q.Set("path", ss.WSSettings.Path)
 			}
-			if h, ok := ss.WSSettings.Headers["Host"]; ok && h != "" {
-				q.Set("host", h)
-			} else if h, ok := ss.WSSettings.Headers["host"]; ok && h != "" {
+			if h := wsHost(ss.WSSettings.Headers); h != "" {
 				q.Set("host", h)
 			}
 		}
@@ -480,11 +494,7 @@ func vmessURI(vs vnextSettingsT, ss *streamSettingsT, remarks string) (string, e
 	case "ws":
 		if ss.WSSettings != nil {
 			path = ss.WSSettings.Path
-			if h, ok := ss.WSSettings.Headers["Host"]; ok {
-				host = h
-			} else if h, ok := ss.WSSettings.Headers["host"]; ok {
-				host = h
-			}
+			host = wsHost(ss.WSSettings.Headers)
 		}
 	case "grpc":
 		if ss.GRPCSettings != nil {
@@ -548,7 +558,7 @@ func shadowsocksURI(ts serversSettingsT, remarks string) (string, error) {
 		return "", fmt.Errorf("shadowsocks: missing server")
 	}
 	s := ts.Servers[0]
-	userInfo := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", s.Method, s.Password)))
+	userInfo := base64.StdEncoding.EncodeToString([]byte(s.Method + ":" + s.Password))
 	return fmt.Sprintf("ss://%s@%s:%d#%s", userInfo, s.Address, s.Port, url.PathEscape(remarks)), nil
 }
 
@@ -628,6 +638,56 @@ func extractURIsFromConfig(pt []byte) ([]string, error) {
 	return uris, nil
 }
 
+func matchesCharset(s string, table [256]bool) bool {
+	for i := 0; i < len(s); i++ {
+		if !table[s[i]] {
+			return false
+		}
+	}
+	return true
+}
+
+func isHexString(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !hexTable[s[i]] {
+			return false
+		}
+	}
+	return true
+}
+
+var hexTable = [256]bool{}
+var b64StdTable = [256]bool{}
+var b64URLTable = [256]bool{}
+
+func init() {
+	for i := byte('0'); i <= '9'; i++ {
+		hexTable[i] = true
+		b64StdTable[i] = true
+		b64URLTable[i] = true
+	}
+	for i := byte('a'); i <= 'f'; i++ {
+		hexTable[i] = true
+	}
+	for i := byte('A'); i <= 'F'; i++ {
+		hexTable[i] = true
+	}
+	for i := byte('a'); i <= 'z'; i++ {
+		b64StdTable[i] = true
+		b64URLTable[i] = true
+	}
+	for i := byte('A'); i <= 'Z'; i++ {
+		b64StdTable[i] = true
+		b64URLTable[i] = true
+	}
+	b64StdTable['+'] = true
+	b64StdTable['/'] = true
+	b64StdTable['='] = true
+	b64URLTable['-'] = true
+	b64URLTable['_'] = true
+	b64URLTable['='] = true
+}
+
 func decodeOne(text string) ([]byte, error) {
 	text = strings.Replace(text, "NPVT1", "", -1)
 	text = strings.Join(strings.Fields(text), "")
@@ -635,16 +695,7 @@ func decodeOne(text string) ([]byte, error) {
 		return nil, fmt.Errorf("empty token")
 	}
 
-	isHex := len(text)%2 == 0
-	if isHex {
-		for _, c := range text {
-			if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
-				isHex = false
-				break
-			}
-		}
-	}
-	if isHex {
+	if len(text)%2 == 0 && isHexString(text) {
 		if b, err := hex.DecodeString(text); err == nil {
 			return b, nil
 		}
@@ -656,11 +707,15 @@ func decodeOne(text string) ([]byte, error) {
 		}
 		return s
 	}
-	if b, err := base64.StdEncoding.DecodeString(pad(text)); err == nil {
-		return b, nil
+	if matchesCharset(text, b64StdTable) {
+		if b, err := base64.StdEncoding.DecodeString(pad(text)); err == nil {
+			return b, nil
+		}
 	}
-	if b, err := base64.URLEncoding.DecodeString(pad(text)); err == nil {
-		return b, nil
+	if matchesCharset(text, b64URLTable) {
+		if b, err := base64.URLEncoding.DecodeString(pad(text)); err == nil {
+			return b, nil
+		}
 	}
 
 	return nil, fmt.Errorf("could not parse token as hex or base64: %.40s", text)

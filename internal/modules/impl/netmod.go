@@ -3,6 +3,7 @@ package impl
 import (
 	"bytes"
 	"crypto/aes"
+	"crypto/cipher"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,22 @@ var NetModKeys = []string{
 	"<n3t5yn4^n3tm0d>",
 	"_netsyna_netmod_",
 	"nicetrybuddygoon",
+}
+
+var netModCiphers = initNetModCiphers()
+
+func initNetModCiphers() []cipher.Block {
+	blocks := make([]cipher.Block, 0, len(NetModKeys))
+	for _, key := range NetModKeys {
+		if len(key) != aes.BlockSize {
+			continue
+		}
+		block, err := aes.NewCipher([]byte(key))
+		if err == nil {
+			blocks = append(blocks, block)
+		}
+	}
+	return blocks
 }
 
 func init() {
@@ -61,31 +78,24 @@ func init() {
 
 func decryptNetMod(ciphertext []byte) ([]byte, string, error) {
 	var lastErr error
-	for _, key := range NetModKeys {
-		if len(key) != 16 {
-			continue
-		}
-		block, err := aes.NewCipher([]byte(key))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if len(ciphertext) == 0 || len(ciphertext)%block.BlockSize() != 0 {
+	for i, block := range netModCiphers {
+		bs := block.BlockSize()
+		if len(ciphertext) == 0 || len(ciphertext)%bs != 0 {
 			lastErr = fmt.Errorf("ciphertext length not multiple of block size")
 			continue
 		}
 
 		plaintext := make([]byte, len(ciphertext))
-		for start := 0; start < len(ciphertext); start += block.BlockSize() {
-			block.Decrypt(plaintext[start:start+block.BlockSize()], ciphertext[start:start+block.BlockSize()])
+		for start := 0; start < len(ciphertext); start += bs {
+			block.Decrypt(plaintext[start:start+bs], ciphertext[start:start+bs])
 		}
 
-		unpadded, err := strictPKCS7Unpad(plaintext, block.BlockSize())
+		unpadded, err := strictPKCS7Unpad(plaintext, bs)
 		if err != nil {
-			lastErr = fmt.Errorf("key %q: %v", key, err)
+			lastErr = fmt.Errorf("key %q: %v", NetModKeys[i], err)
 			continue
 		}
-		return unpadded, key, nil
+		return unpadded, NetModKeys[i], nil
 	}
 	return nil, "", fmt.Errorf("no netmod key matched: %v", lastErr)
 }
