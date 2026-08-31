@@ -44,9 +44,15 @@ func decryptNPVT(req modules.Request) (modules.Result, error) {
 
 		uris := processBlob(pt)
 		if len(uris) == 0 {
+			trimmed := bytes.TrimSpace(pt)
+			if len(trimmed) == 0 || trimmed[0] != '[' {
+				continue
+			}
 			var asJSON bytes.Buffer
-			json.Indent(&asJSON, pt, "", "  ")
-			lines = append(lines, strings.TrimSpace(asJSON.String()))
+			if json.Indent(&asJSON, trimmed, "", "  ") != nil {
+				continue
+			}
+			lines = append(lines, asJSON.String())
 			continue
 		}
 		lines = append(lines, uris...)
