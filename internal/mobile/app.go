@@ -635,5 +635,6 @@ func supportedFormats() []FormatEntry {
 		{Ext: ".happ", Desc: "format_happ"},
 		{Ext: ".bpf", Desc: "format_bpf"},
 		{Ext: ".tls", Desc: "format_tls"},
+		{Ext: ".zsx", Desc: "format_zsx"},
 	}
 }

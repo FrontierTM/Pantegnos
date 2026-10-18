@@ -16,6 +16,7 @@ func TestParseClipboardAcceptsKnownSchemes(t *testing.T) {
 		"nm-v3://abc":              "clipboard.nm",
 		"npvs://abc":               "clipboard.npvs",
 		"npvt://abc":               "clipboard.npvt",
+		"zedsecure://abc":          "clipboard.zsx",
 	}
 	for uri, want := range cases {
 		got, ok := ParseClipboard(uri)

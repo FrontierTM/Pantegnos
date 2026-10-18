@@ -44,6 +44,7 @@ One decryption core, three front-ends: a **CLI**, an **in-browser decryptor** at
 | Happ Proxy                               | `.happ`          | `happ://crypt[1-5]/`                                    |
 | sing-box profile export (SFA/SFI/SFM)    | `.bpf`           | *(extension-based)*                                     |
 | TLS Tunnel (SSH/proxy payload profiles)  | `.tls`           | *(extension-based)*                                     |
+| ZedSecure                                | `.zsx`           | `zedsecure://`                                          |
 
 SlipNet profiles support schema versions 1 through 28, covering fields like VLESS, SSH tunneling, SOCKS5, DoH, SNI fragmentation, and more.
 
@@ -79,7 +80,7 @@ The app declares **zero permissions**: no `INTERNET`, no storage. The WebView se
 **Features**
 
 - Pick one or many config files through the system file picker, or paste a `…://` config URI from the clipboard
-- Sequential queue with per-file module identification (`.slip`, `.ehi`, `.dark`, `.hat`, `.npvt`, `.npvs`, `.nm`, `.happ`, `.bpf`, `.tls`)
+- Sequential queue with per-file module identification (`.slip`, `.ehi`, `.dark`, `.hat`, `.npvt`, `.npvs`, `.nm`, `.happ`, `.bpf`, `.tls`, `.zsx`)
 - Passphrase prompt with automatic retry, for `.npvs` bundles and SlipNet bundle files
 - Monospaced viewer with selectable text and a wrap/scroll toggle
 - Copy, share (as a real `.txt` file via `FileProvider`, so a VPN client can import it) or save anywhere

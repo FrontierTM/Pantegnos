@@ -40,6 +40,7 @@
   "format_npvt": "NapsternetV — whitebox AES-CTR-SHA256",
   "format_slip": "SlipNet profile — plaintext or AES-256-GCM envelope",
   "format_tls": "TLS Tunnel — AES-256-GCM profile with a reversed-base64 payload",
+  "format_zsx": "ZedSecure vault — AES-256-GCM with optional Argon2id password",
   "msg_copied": "Copied to clipboard",
   "msg_copy_failed": "Clipboard unavailable",
   "msg_engine_failed": "Decryption failed",

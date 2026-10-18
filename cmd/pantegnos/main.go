@@ -43,7 +43,7 @@ const disclaimer = `
   ┌───────────────────────────────────────────────────────────────────────┐
   │ PANTEGNOS :: Multi-Config Decryptor %-33s                            │
   ├───────────────────────────────────────────────────────────────────────┤
-  │ SUPPORTED: .slip .ehi .dark .hat .npvt .npvs .nm .happ .bpf .tls    │
+  │ SUPPORTED: .slip .ehi .dark .hat .npvt .npvs .nm .happ .bpf .tls .zsx │
   ├───────────────────────────────────────────────────────────────────────┤
   │ LEGAL NOTICE & LIABILITY WAIVER                                       │
   │                                                                       │

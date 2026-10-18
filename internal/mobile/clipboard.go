@@ -20,6 +20,7 @@ var knownPrefixes = []struct {
 	{"nm", ".nm"},
 	{"npvs", ".npvs"},
 	{"npvt", ".npvt"},
+	{"zedsecure", ".zsx"},
 }
 
 const schemeSeparator = "://"
