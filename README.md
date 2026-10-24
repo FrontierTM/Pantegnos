@@ -37,6 +37,7 @@ One decryption core, three front-ends: a **CLI**, an **in-browser decryptor** at
 |------------------------------------------|------------------|---------------------------------------------------------|
 | SlipNet (Encrypted / Plaintext / Bundle) | `.slip`          | `slipnet://`, `slipnet-enc://`, `slipnet-bundle-enc://` |
 | HTTP Injector (SSH/V2ray) - Native       | `.ehi`           | *(extension-based)*                                     |
+| HTTP Custom                              | `.hc`            | *(extension-based)*                                     |
 | DarkTunnel - SSH DNSTT V2Ray             | `.dark`          | `darktunnel://`                                         |
 | HA Tunnel Plus                           | `.hat`           | *(extension-based)*                                     |
 | NpvTunnel (NapsternetV) (NPVT / NPVS)    | `.npvt`, `.npvs` | `NPVT1`, `NPVS`                                         |
@@ -44,9 +45,10 @@ One decryption core, three front-ends: a **CLI**, an **in-browser decryptor** at
 | Happ Proxy                               | `.happ`          | `happ://crypt[1-5]/`                                    |
 | sing-box profile export (SFA/SFI/SFM)    | `.bpf`           | *(extension-based)*                                     |
 | TLS Tunnel (SSH/proxy payload profiles)  | `.tls`           | *(extension-based)*                                     |
+| V2Box                                    | `.v2box`         | `v2box://locked=`                                       |
 | ZedSecure                                | `.zsx`           | `zedsecure://`                                          |
 
-SlipNet profiles support schema versions 1 through 28, covering fields like VLESS, SSH tunneling, SOCKS5, DoH, SNI fragmentation, and more.
+Note: HTTP Custom `.hc` exports are handled in three layouts: the legacy HCDecryptor format and the HCX1/HCCFG binary envelope. HCX1/HCCFG schema 2, 5, and 7 files with the `n7` schedule are supported. Password-protected, HWID-locked, schema 1, and other schedule variants return a clear error.
 
 ## Web Decryptor
 
@@ -80,8 +82,8 @@ The app declares **zero permissions**: no `INTERNET`, no storage. The WebView se
 **Features**
 
 - Pick one or many config files through the system file picker, or paste a `…://` config URI from the clipboard
-- Sequential queue with per-file module identification (`.slip`, `.ehi`, `.dark`, `.hat`, `.npvt`, `.npvs`, `.nm`, `.happ`, `.bpf`, `.tls`, `.zsx`)
-- Passphrase prompt with automatic retry, for `.npvs` bundles and SlipNet bundle files
+- Sequential queue with per-file module identification (`.slip`, `.ehi`, `.dark`, `.hat`, `.npvt`, `.npvs`, `.hc`, `.nm`, `.happ`, `.bpf`, `.tls`, `.v2box`, `.zsx`)
+- Passphrase prompt with automatic retry, for `.npvs` bundles, SlipNet bundle files and password-protected `.v2box` exports
 - Monospaced viewer with selectable text and a wrap/scroll toggle
 - Copy, share (as a real `.txt` file via `FileProvider`, so a VPN client can import it) or save anywhere
 - Light / dark / system themes, English and Persian (RTL) localisations, vector launcher icon with an Android 13+ themed variant
@@ -154,7 +156,7 @@ Pre-built binaries are available in the [Releases](https://github.com/KernelDotD
 
 - [colorgrad](https://github.com/mazznoer/colorgrad) — Terminal gradient text
 - [termenv](https://github.com/muesli/termenv) — Terminal capabilities
-- [golang.org/x/crypto](https://pkg.go.dev/golang.org/x/crypto) — ChaCha20-Poly1305 AEAD
+- [golang.org/x/crypto](https://pkg.go.dev/golang.org/x/crypto) — ChaCha20, XChaCha20, and ChaCha20-Poly1305
 - [golang.org/x/term](https://pkg.go.dev/golang.org/x/term) — Secure password input (bundle mode)
 
 ## License

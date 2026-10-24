@@ -20,6 +20,7 @@ var knownPrefixes = []struct {
 	{"nm", ".nm"},
 	{"npvs", ".npvs"},
 	{"npvt", ".npvt"},
+	{"v2box", ".v2box"},
 	{"zedsecure", ".zsx"},
 }
 
