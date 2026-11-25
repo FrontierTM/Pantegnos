@@ -47,6 +47,7 @@ One decryption core, three front-ends: a **CLI**, an **in-browser decryptor** at
 | TLS Tunnel (SSH/proxy payload profiles)  | `.tls`           | *(extension-based)*                                     |
 | V2Box                                    | `.v2box`         | `v2box://locked=`                                       |
 | ZedSecure                                | `.zsx`           | `zedsecure://`                                          |
+| SocksIP / SocksTunnel                    | `.sip`           | *(extension-based)*                                     |
 
 Note: HTTP Custom `.hc` exports are handled in three layouts: the legacy HCDecryptor format and the HCX1/HCCFG binary envelope. HCX1/HCCFG schema 2, 5, and 7 files with the `n7` schedule are supported. Password-protected, HWID-locked, schema 1, and other schedule variants return a clear error.
 
@@ -82,7 +83,7 @@ The app declares **zero permissions**: no `INTERNET`, no storage. The WebView se
 **Features**
 
 - Pick one or many config files through the system file picker, or paste a `…://` config URI from the clipboard
-- Sequential queue with per-file module identification (`.slip`, `.ehi`, `.dark`, `.hat`, `.npvt`, `.npvs`, `.hc`, `.nm`, `.happ`, `.bpf`, `.tls`, `.v2box`, `.zsx`)
+- Sequential queue with per-file module identification (`.slip`, `.ehi`, `.dark`, `.hat`, `.npvt`, `.npvs`, `.hc`, `.nm`, `.happ`, `.bpf`, `.tls`, `.v2box`, `.zsx`, `.sip`)
 - Passphrase prompt with automatic retry, for `.npvs` bundles, SlipNet bundle files and password-protected `.v2box` exports
 - Monospaced viewer with selectable text and a wrap/scroll toggle
 - Copy, share (as a real `.txt` file via `FileProvider`, so a VPN client can import it) or save anywhere

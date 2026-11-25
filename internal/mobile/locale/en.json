@@ -38,6 +38,7 @@
   "format_nm": "NetMod — AES-ECB with a fixed key",
   "format_npvs": "NapsternetV — PBKDF2 + ChaCha20-Poly1305",
   "format_npvt": "NapsternetV — whitebox AES-CTR-SHA256",
+  "format_sip": "SocksIP .sip profile — Base64 + AES outer layer with legacy, VER2, VER5, VER7 and VER8 containers",
   "format_slip": "SlipNet profile — plaintext or AES-256-GCM envelope",
   "format_tls": "TLS Tunnel — AES-256-GCM profile with a reversed-base64 payload",
   "format_v2box": "V2Box export — AES-256-GCM with a fixed app key or the export password",

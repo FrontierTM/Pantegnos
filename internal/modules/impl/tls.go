@@ -99,6 +99,35 @@ type TLSConfig struct {
 	values map[string]string
 }
 
+func init() {
+	modules.Register(modules.Module{
+		Name:      "TLS Tunnel (SSH/proxy payload profiles)",
+		ApkAuthor: "https://play.google.com/store/apps/details?id=com.tlsvpn.tlstunnel",
+		Proto:     []string{},
+		Extension: ".tls",
+		Decrypt: func(req modules.Request) (modules.Result, error) {
+			data := req.Data
+			if len(data) == 0 {
+				data = []byte(req.Payload)
+			}
+
+			plaintext, keyIndex, err := DecryptTLSConfig(data)
+			if err != nil {
+				return modules.Result{}, err
+			}
+			cfg, err := ParseTLSConfig(plaintext)
+			if err != nil {
+				return modules.Result{}, err
+			}
+
+			return modules.Result{
+				Text:     cfg.Format(keyIndex),
+				FileName: modules.OutputName(req.FileName, ".tls"),
+			}, nil
+		},
+	})
+}
+
 func tlsConfigKeys() [][]byte {
 	keys := make([][]byte, len(tlsConfigKeyLiterals))
 	for i, literal := range tlsConfigKeyLiterals {
@@ -335,33 +364,4 @@ func tlsValueLines(value string) string {
 		lines[i] = indent + strings.TrimSpace(lines[i])
 	}
 	return strings.Join(lines, "\n")
-}
-
-func init() {
-	modules.Register(modules.Module{
-		Name:      "TLS Tunnel (SSH/proxy payload profiles)",
-		ApkAuthor: "https://play.google.com/store/apps/details?id=com.tlsvpn.tlstunnel",
-		Proto:     []string{},
-		Extension: ".tls",
-		Decrypt: func(req modules.Request) (modules.Result, error) {
-			data := req.Data
-			if len(data) == 0 {
-				data = []byte(req.Payload)
-			}
-
-			plaintext, keyIndex, err := DecryptTLSConfig(data)
-			if err != nil {
-				return modules.Result{}, err
-			}
-			cfg, err := ParseTLSConfig(plaintext)
-			if err != nil {
-				return modules.Result{}, err
-			}
-
-			return modules.Result{
-				Text:     cfg.Format(keyIndex),
-				FileName: modules.OutputName(req.FileName, ".tls"),
-			}, nil
-		},
-	})
 }

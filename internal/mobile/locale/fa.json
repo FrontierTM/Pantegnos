@@ -38,6 +38,7 @@
   "format_nm": "NetMod — AES-ECB با کلید ثابت",
   "format_npvs": "NapsternetV — PBKDF2 و ChaCha20-Poly1305",
   "format_npvt": "NapsternetV — AES-CTR-SHA256 جعبه‌سفید",
+  "format_sip": "پروفایل SocksIP .sip — لایه بیرونی Base64 + AES با کانتینرهای legacy، VER2، VER5، VER7 و VER8",
   "format_slip": "پروفایل SlipNet — متن ساده یا پوشش AES-256-GCM",
   "format_tls": "TLS Tunnel — پروفایل AES-256-GCM با بستهٔ base64 معکوس",
   "format_v2box": "خروجی V2Box — AES-256-GCM با کلید ثابت برنامه یا رمز خروجی",

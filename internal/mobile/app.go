@@ -637,5 +637,6 @@ func supportedFormats() []FormatEntry {
 		{Ext: ".tls", Desc: "format_tls"},
 		{Ext: ".v2box", Desc: "format_v2box"},
 		{Ext: ".zsx", Desc: "format_zsx"},
+		{Ext: ".sip", Desc: "format_sip"},
 	}
 }
